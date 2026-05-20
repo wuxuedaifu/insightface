@@ -9,6 +9,7 @@ from typing import Callable
 from PySide6.QtCore import QObject, QRunnable, Qt, QThreadPool, QTimer, QUrl, Signal, Slot
 from PySide6.QtGui import QAction, QDesktopServices, QFontMetrics, QKeySequence
 from PySide6.QtWidgets import (
+    QApplication,
     QComboBox,
     QDialog,
     QDialogButtonBox,
@@ -38,6 +39,7 @@ from .core.navigation import (
     last_page_attr,
     mode_from_value,
 )
+from .core.theme import application_stylesheet
 from .dialogs.license_dialog import LicenseDialog
 from .dialogs.model_manager_dialog import ModelManagerDialog
 from .dialogs.settings_dialog import SettingsDialog
@@ -193,23 +195,25 @@ class MainWindow(QMainWindow):
     def __init__(self, context, parent=None):
         super().__init__(parent)
         self.context = context
+        self.apply_theme()
         self.setWindowTitle(WINDOW_TITLE)
         self.resize(int(context.config.ui_window_width), int(context.config.ui_window_height))
         self.thread_pool = QThreadPool.globalInstance()
         self.active_workers: set[Worker] = set()
         self.page_registry = PageRegistry(context)
         self.pages = self.page_registry.pages
-        self.current_mode = mode_from_value(context.config.ui_last_mode or context.config.ui_default_mode)
+        self.current_mode = mode_from_value(context.config.ui_last_mode)
         self.current_page_key = ""
 
         self.stack = QStackedWidget()
         self.sidebar = QWidget()
+        self.sidebar.setObjectName("modeSidebar")
         self.sidebar.setFixedWidth(int(context.config.ui_sidebar_width or 240))
         self.sidebar_title = QLabel()
         self.sidebar_title.setStyleSheet("font-size:18px; font-weight:700;")
         self.sidebar_description = QLabel()
         self.sidebar_description.setWordWrap(True)
-        self.sidebar_description.setStyleSheet("color:#4b5563;")
+        self.sidebar_description.setProperty("role", "muted")
         self.sidebar_list = QListWidget()
         self.sidebar_list.setAlternatingRowColors(False)
         self.sidebar_list.itemClicked.connect(self._sidebar_clicked)
@@ -244,13 +248,12 @@ class MainWindow(QMainWindow):
     def _build_top_bar(self) -> QWidget:
         bar = QWidget()
         bar.setObjectName("topAppBar")
-        bar.setStyleSheet("QWidget#topAppBar{background:#ffffff; border-bottom:1px solid #e5e7eb;}")
         layout = QHBoxLayout(bar)
         layout.setContentsMargins(14, 8, 14, 8)
         title = QLabel("InsightFace Evaluation Studio")
         title.setStyleSheet("font-size:18px; font-weight:700; border:0;")
         version = QLabel("v1.0")
-        version.setStyleSheet("color:#6b7280; border:0;")
+        version.setProperty("role", "muted")
         self.mode_combo = QComboBox()
         for mode in NAVIGATION_MODES.values():
             self.mode_combo.addItem(mode.title, mode.id.value)
@@ -259,7 +262,7 @@ class MainWindow(QMainWindow):
         self.provider_chip = QLabel()
         self.license_chip = QLabel()
         for chip in (self.model_chip, self.provider_chip, self.license_chip):
-            chip.setStyleSheet("padding:4px 8px; border:1px solid #d1d5db; border-radius:6px; background:#f9fafb;")
+            chip.setProperty("role", "statusChip")
         layout.addWidget(title)
         layout.addWidget(version)
         layout.addSpacing(18)
@@ -424,9 +427,18 @@ class MainWindow(QMainWindow):
 
     def open_settings_dialog(self) -> None:
         dialog = SettingsDialog(self.context, self)
-        dialog.settingsSaved.connect(self.refresh_statusbar)
+        dialog.settingsSaved.connect(self._settings_saved)
         dialog.exec()
         self.refresh_statusbar()
+
+    def _settings_saved(self) -> None:
+        self.apply_theme()
+        self.refresh_statusbar()
+
+    def apply_theme(self) -> None:
+        qt_app = QApplication.instance()
+        if qt_app is not None:
+            qt_app.setStyleSheet(application_stylesheet(self.context.config.ui_theme))
 
     def open_model_manager(self, initial: str | None = None) -> None:
         dialog = ModelManagerDialog(self.context, self)

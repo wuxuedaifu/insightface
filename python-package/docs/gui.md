@@ -75,7 +75,8 @@ sidebar:
 
 Global utilities are always available from the top app bar:
 
-- **Settings** opens the application settings dialog.
+- **Settings** opens the application settings dialog for the UI theme. Workspace
+  paths are chosen on first launch and are not changed from this dialog.
 - **Models** opens runtime settings, model downloads, and custom model directory
   tools.
 - **License** opens the License Center dialog.

@@ -35,7 +35,11 @@ def test_main_window_smoke(tmp_path):
         assert "Model Settings" not in sidebar_titles
         assert "Model Downloads" not in sidebar_titles
         assert "License Center" not in sidebar_titles
-    dialogs = [SettingsDialog(window.context, window), ModelManagerDialog(window.context, window), LicenseDialog(window.context, window)]
+    settings_dialog = SettingsDialog(window.context, window)
+    assert hasattr(settings_dialog, "theme")
+    assert not hasattr(settings_dialog, "workspace")
+    assert not hasattr(settings_dialog, "default_mode")
+    dialogs = [settings_dialog, ModelManagerDialog(window.context, window), LicenseDialog(window.context, window)]
     for dialog in dialogs:
         dialog.close()
     window.close()

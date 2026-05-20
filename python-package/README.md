@@ -60,7 +60,9 @@ gallery images / a folder for 1:N gallery search. Album Management uses a
 single **Album** workspace for adding one or more folders, refreshing new
 images, DBSCAN clustering, and reviewing original photo thumbnails.
 Global utilities are available from the top bar and **Tools** menu:
-**Settings**, **Models**, and **License**.
+**Settings**, **Models**, and **License**. **Settings** currently only controls
+the UI theme; workspace paths are chosen on first launch and are not changed
+from the settings dialog.
 
 Models are not downloaded automatically by the GUI. Open **Models > Downloads**,
 click **Refresh Download URLs** to read the latest GitHub Releases
