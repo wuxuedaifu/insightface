@@ -13,6 +13,9 @@ import os
 import os.path as osp
 import cv2
 import sys
+import logging
+
+LOGGER = logging.getLogger("insightface.gui.detector")
 
 def softmax(z):
     assert len(z.shape) == 2
@@ -90,9 +93,12 @@ class SCRFD:
         input_shape = input_cfg.shape
         #print(input_shape)
         if isinstance(input_shape[2], str):
-            self.input_size = None
+            self.static_input_size = None
         else:
-            self.input_size = tuple(input_shape[2:4][::-1])
+            self.static_input_size = tuple(input_shape[2:4][::-1])
+        self.input_size = self.static_input_size
+        self.input_sizes = [self.static_input_size] if self.static_input_size is not None else []
+        self._debug_det_size_printed = False
         #print('image_size:', self.image_size)
         input_name = input_cfg.name
         self.input_shape = input_shape
@@ -141,10 +147,16 @@ class SCRFD:
             self.det_thresh = det_thresh
         input_size = kwargs.get('input_size', None)
         if input_size is not None:
-            if self.input_size is not None:
-                print('warning: det_size is already set in scrfd model, ignore')
+            print('[InsightFace][SCRFD] prepare input_size:', input_size)
+            LOGGER.info("SCRFD prepare input_size=%s", input_size)
+            if self.static_input_size is not None:
+                print('warning: det_size is fixed in scrfd model, ignore requested input_size')
+                self.input_size = self.static_input_size
+                self.input_sizes = [self.static_input_size]
             else:
-                self.input_size = input_size
+                self.input_sizes = self._normalize_input_sizes(input_size)
+                self.input_size = self.input_sizes[-1]
+            self._debug_det_size_printed = False
 
     def forward(self, img, threshold):
         scores_list = []
@@ -218,39 +230,36 @@ class SCRFD:
         return scores_list, bboxes_list, kpss_list
 
     def detect(self, img, input_size = None, max_num=0, metric='default'):
-        assert input_size is not None or self.input_size is not None
-        input_size = self.input_size if input_size is None else input_size
-            
-        im_ratio = float(img.shape[0]) / img.shape[1]
-        model_ratio = float(input_size[1]) / input_size[0]
-        if im_ratio>model_ratio:
-            new_height = input_size[1]
-            new_width = int(new_height / im_ratio)
-        else:
-            new_width = input_size[0]
-            new_height = int(new_width * im_ratio)
-        det_scale = float(new_height) / img.shape[0]
-        resized_img = cv2.resize(img, (new_width, new_height))
-        det_img = np.zeros( (input_size[1], input_size[0], 3), dtype=np.uint8 )
-        det_img[:new_height, :new_width, :] = resized_img
-
-        scores_list, bboxes_list, kpss_list = self.forward(det_img, self.det_thresh)
-
-        scores = np.vstack(scores_list)
-        scores_ravel = scores.ravel()
-        order = scores_ravel.argsort()[::-1]
-        bboxes = np.vstack(bboxes_list) / det_scale
-        if self.use_kps:
-            kpss = np.vstack(kpss_list) / det_scale
-        pre_det = np.hstack((bboxes, scores)).astype(np.float32, copy=False)
+        input_sizes = self._resolve_input_sizes(input_size)
+        assert input_sizes
+        if not self._debug_det_size_printed:
+            print('[InsightFace][SCRFD] detect input_sizes:', input_sizes, 'image_shape:', img.shape)
+            LOGGER.info("SCRFD detect input_sizes=%s image_shape=%s", input_sizes, img.shape)
+            self._debug_det_size_printed = True
+        pre_det_list = []
+        kpss_det_list = []
+        for input_size in input_sizes:
+            pre_det, kpss = self._detect_candidates(img, input_size)
+            if pre_det.shape[0] == 0:
+                continue
+            pre_det_list.append(pre_det)
+            if self.use_kps and kpss is not None:
+                kpss_det_list.append(kpss)
+        if not pre_det_list:
+            det = np.empty((0, 5), dtype=np.float32)
+            kpss = np.empty((0, 5, 2), dtype=np.float32) if self.use_kps else None
+            return det, kpss
+        pre_det = np.vstack(pre_det_list).astype(np.float32, copy=False)
+        order = pre_det[:, 4].argsort()[::-1]
         pre_det = pre_det[order, :]
-        keep = self.nms(pre_det)
-        det = pre_det[keep, :]
-        if self.use_kps:
-            kpss = kpss[order,:,:]
-            kpss = kpss[keep,:,:]
+        if self.use_kps and len(kpss_det_list) == len(pre_det_list):
+            kpss = np.vstack(kpss_det_list)[order, :, :]
         else:
             kpss = None
+        keep = self.nms(pre_det)
+        det = pre_det[keep, :]
+        if kpss is not None:
+            kpss = kpss[keep, :, :]
         if max_num > 0 and det.shape[0] > max_num:
             area = (det[:, 2] - det[:, 0]) * (det[:, 3] -
                                                     det[:, 1])
@@ -271,6 +280,76 @@ class SCRFD:
             if kpss is not None:
                 kpss = kpss[bindex, :]
         return det, kpss
+
+    def _detect_candidates(self, img, input_size):
+        im_ratio = float(img.shape[0]) / img.shape[1]
+        model_ratio = float(input_size[1]) / input_size[0]
+        if im_ratio>model_ratio:
+            new_height = input_size[1]
+            new_width = int(new_height / im_ratio)
+        else:
+            new_width = input_size[0]
+            new_height = int(new_width * im_ratio)
+        det_scale = float(new_height) / img.shape[0]
+        resized_img = cv2.resize(img, (new_width, new_height))
+        det_img = np.zeros( (input_size[1], input_size[0], 3), dtype=np.uint8 )
+        det_img[:new_height, :new_width, :] = resized_img
+
+        scores_list, bboxes_list, kpss_list = self.forward(det_img, self.det_thresh)
+
+        if len(scores_list) == 0 or sum(score.size for score in scores_list) == 0:
+            kps_shape = (0, 5, 2) if self.use_kps else None
+            return np.empty((0, 5), dtype=np.float32), np.empty(kps_shape, dtype=np.float32) if kps_shape else None
+        scores = np.vstack(scores_list)
+        scores_ravel = scores.ravel()
+        order = scores_ravel.argsort()[::-1]
+        bboxes = np.vstack(bboxes_list) / det_scale
+        if self.use_kps:
+            kpss = np.vstack(kpss_list) / det_scale
+        pre_det = np.hstack((bboxes, scores)).astype(np.float32, copy=False)
+        pre_det = pre_det[order, :]
+        if self.use_kps:
+            kpss = kpss[order,:,:]
+        else:
+            kpss = None
+        return pre_det, kpss
+
+    def _resolve_input_sizes(self, input_size):
+        if input_size is not None:
+            return self._normalize_input_sizes(input_size)
+        if self.input_sizes:
+            return list(self.input_sizes)
+        if self.input_size is not None:
+            return [self.input_size]
+        return []
+
+    @staticmethod
+    def _normalize_input_sizes(input_size):
+        if input_size is None:
+            return []
+        if isinstance(input_size, np.ndarray):
+            input_size = input_size.tolist()
+        if (
+            isinstance(input_size, (list, tuple))
+            and len(input_size) > 0
+            and isinstance(input_size[0], (list, tuple, np.ndarray))
+        ):
+            values = input_size
+        else:
+            values = [input_size]
+        sizes = []
+        for item in values:
+            if isinstance(item, np.ndarray):
+                item = item.tolist()
+            if len(item) != 2:
+                raise ValueError('det_size must be a pair or a list of pairs')
+            width, height = int(item[0]), int(item[1])
+            if width <= 0 or height <= 0:
+                raise ValueError('det_size values must be positive')
+            size = (width, height)
+            if size not in sizes:
+                sizes.append(size)
+        return sizes
 
     def nms(self, dets):
         thresh = self.nms_thresh
@@ -345,4 +424,3 @@ if __name__ == '__main__':
         filename = img_path.split('/')[-1]
         print('output:', filename)
         cv2.imwrite('./outputs/%s'%filename, img)
-

@@ -16,6 +16,85 @@ Starting from insightface>=0.2, we use onnxruntime as inference backend.
 
 You have to install ``onnxruntime-gpu`` manually to enable GPU inference, or install ``onnxruntime`` to use CPU only inference.
 
+### Install InsightFace Evaluation Studio GUI
+
+InsightFace 1.0 includes a local desktop GUI:
+
+```
+pip install "insightface[gui]"
+insightface-gui
+```
+
+Development install:
+
+```
+cd python-package
+pip install -e ".[gui]"
+insightface-gui
+```
+
+Equivalent launch commands:
+
+```
+insightface-eval-studio
+insightface-desktop
+python -m insightface.gui
+```
+
+The GUI is called **InsightFace Evaluation Studio**. It provides local 1:1 face
+compare, People Library management, 1:N face search, multi-face photo
+recognition, batch folder processing, album people clustering, enterprise
+evaluation reports, and a face swap entry point. User images, videos,
+embeddings, databases, and reports are stored locally by default under
+``~/.insightface/gui`` and are not uploaded automatically.
+Image and video previews are clickable upload targets: click
+``Click to upload or drag a file here`` or drop a file onto the preview. The
+preview changes color on hover and during drag-over. Loaded previews show a
+small delete button and can be replaced by dragging in another file.
+
+The desktop app uses mode-based navigation. Choose **Face Recognition**,
+**Album Management**, **Face Swap**, or **Enterprise Evaluation** from the top
+app bar. Face Recognition is a single **Query & Gallery** workspace: upload
+one query image and one gallery image for 1:1 compare, or upload multiple
+gallery images / a folder for 1:N gallery search. Album Management uses a
+single **Album** workspace for adding one or more folders, refreshing new
+images, DBSCAN clustering, and reviewing original photo thumbnails.
+Global utilities are available from the top bar and **Tools** menu:
+**Settings**, **Models**, and **License**.
+
+Models are not downloaded automatically by the GUI. Open **Models > Downloads**,
+click **Refresh Download URLs** to read the latest GitHub Releases
+asset URLs, then explicitly download the selected package. Downloaded zip files
+are cached under ``~/.insightface/gui/cache/models`` and extracted under
+``~/.insightface/models/<model_name>/``.
+Detection size defaults to **Auto**, which runs joint 128x128 and 640x640
+detection. Face swap models are selected in **Models > Runtime** from already
+downloaded swap models only; the Face Swap workspace loads the configured swap
+model only when a swap is run.
+
+### Optional face3d Build
+
+InsightFace 1.0 does not build the optional ``face3d`` Cython/C++ extension by
+default. This keeps the default install lighter and avoids local compiler
+requirements. Users who need the legacy mask renderer / face3d path can opt in:
+
+```
+pip install -e ".[face3d]" --no-build-isolation --config-settings editable_mode=compat
+python setup.py build_ext --inplace --with-face3d
+```
+
+The same build can also be enabled with:
+
+```
+INSIGHTFACE_WITH_FACE3D=1 python setup.py build_ext --inplace
+```
+
+More details:
+
+- ``docs/gui.md``
+- ``docs/commercial_evaluation.md``
+- ``docs/gui_packaging.md``
+
 ## Change Log
 
 ### [0.7.1] - 2022-12-14
@@ -149,5 +228,3 @@ handler = insightface.model_zoo.get_model('your_recognition_model.onnx')
 handler.prepare(ctx_id=0)
 
 ```
-
-
