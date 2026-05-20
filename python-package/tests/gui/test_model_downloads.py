@@ -1,11 +1,20 @@
 from insightface.gui.core.model_downloads import fallback_model_assets, local_model_status
-from insightface.gui.core.paths import default_workspace
+from insightface.gui.core.paths import default_workspace, workspace_paths
 
 
 def test_default_gui_workspace_path():
     workspace = default_workspace()
     assert workspace.name == "gui"
     assert workspace.parent.name == ".insightface"
+    assert workspace.is_absolute()
+
+
+def test_workspace_paths_are_under_gui_workspace(tmp_path):
+    workspace = (tmp_path / ".insightface" / "gui").resolve()
+    paths = workspace_paths(workspace)
+    assert paths["workspace"] == workspace
+    for key in ("database", "crops", "exports", "reports", "logs", "cache"):
+        assert paths[key].is_relative_to(paths["workspace"])
 
 
 def test_fallback_model_assets_have_github_release_urls(tmp_path):
