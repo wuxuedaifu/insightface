@@ -26,8 +26,10 @@ class FaceSwapEngine:
             )
             return False
         try:
+            import onnxruntime
             from insightface.model_zoo import get_model
 
+            onnxruntime.set_default_logger_severity(3)
             self.model = get_model(str(path), providers=self.providers)
             if self.model is None:
                 self.last_error = "Configured face swap model could not be recognized."

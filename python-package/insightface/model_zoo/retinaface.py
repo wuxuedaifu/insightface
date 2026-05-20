@@ -13,9 +13,6 @@ import os
 import os.path as osp
 import cv2
 import sys
-import logging
-
-LOGGER = logging.getLogger("insightface.gui.detector")
 
 def softmax(z):
     assert len(z.shape) == 2
@@ -144,10 +141,7 @@ class RetinaFace:
             self.det_thresh = det_thresh
         input_size = kwargs.get('input_size', None)
         if input_size is not None:
-            print('[InsightFace][RetinaFace] prepare input_size:', input_size)
-            LOGGER.info("RetinaFace prepare input_size=%s", input_size)
             if self.static_input_size is not None:
-                print('warning: det_size is fixed in detection model, ignore requested input_size')
                 self.input_size = self.static_input_size
                 self.input_sizes = [self.static_input_size]
             else:
@@ -219,10 +213,6 @@ class RetinaFace:
     def detect(self, img, input_size = None, max_num=0, metric='default'):
         input_sizes = self._resolve_input_sizes(input_size)
         assert input_sizes
-        if not self._debug_det_size_printed:
-            print('[InsightFace][RetinaFace] detect input_sizes:', input_sizes, 'image_shape:', img.shape)
-            LOGGER.info("RetinaFace detect input_sizes=%s image_shape=%s", input_sizes, img.shape)
-            self._debug_det_size_printed = True
         pre_det_list = []
         kpss_det_list = []
         for input_size in input_sizes:

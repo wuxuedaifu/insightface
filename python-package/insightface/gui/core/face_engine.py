@@ -84,7 +84,6 @@ class FaceEngine:
                 return
             try:
                 from insightface.app.common import Face
-                from insightface.model_zoo import model_zoo
             except Exception as exc:
                 self.last_error = f"InsightFace runtime import failed: {exc}"
                 LOGGER.exception(self.last_error)
@@ -93,7 +92,7 @@ class FaceEngine:
             del Face
             try:
                 for onnx_file in onnx_files:
-                    model = model_zoo.get_model(onnx_file, providers=self.requested_providers)
+                    model = self._load_model_from_onnx(onnx_file)
                     if model is None:
                         continue
                     if model.taskname in self.models:
@@ -118,6 +117,81 @@ class FaceEngine:
                 self.last_error = f"Model load failed: {exc}"
                 LOGGER.exception(self.last_error)
                 self.loaded = False
+
+    def _load_model_from_onnx(self, onnx_file: str):
+        """Load a model pack member, forcing GUI detection through SCRFD."""
+        try:
+            from insightface.model_zoo.arcface_onnx import ArcFaceONNX
+            from insightface.model_zoo.attribute import Attribute
+            from insightface.model_zoo.inswapper import INSwapper
+            from insightface.model_zoo.landmark import Landmark
+            from insightface.model_zoo.model_zoo import PickableInferenceSession
+            from insightface.model_zoo.scrfd import SCRFD
+        except Exception as exc:
+            raise RuntimeError(f"InsightFace model imports failed: {exc}") from exc
+
+        session_kwargs = {
+            "providers": self.requested_providers,
+            "provider_options": None,
+        }
+        session_options = self._quiet_onnxruntime_session_options()
+        if session_options is not None:
+            session_kwargs["sess_options"] = session_options
+        session = PickableInferenceSession(onnx_file, **session_kwargs)
+        LOGGER.info("Applied providers for %s: %s", onnx_file, getattr(session, "_providers", []))
+        inputs = session.get_inputs()
+        if not inputs:
+            return None
+        input_shape = inputs[0].shape
+        outputs = session.get_outputs()
+        input_height = self._shape_dim(input_shape, 2)
+        input_width = self._shape_dim(input_shape, 3)
+
+        if self._is_scrfd_detection_outputs(outputs):
+            LOGGER.info("GUI detection model routed to SCRFD: %s", onnx_file)
+            return SCRFD(model_file=onnx_file, session=session)
+        if input_height == 192 and input_width == 192:
+            return Landmark(model_file=onnx_file, session=session)
+        if input_height == 96 and input_width == 96:
+            return Attribute(model_file=onnx_file, session=session)
+        if len(inputs) == 2 and input_height == 128 and input_width == 128:
+            return INSwapper(model_file=onnx_file, session=session)
+        if (
+            input_height is not None
+            and input_width is not None
+            and input_height == input_width
+            and input_height >= 112
+            and input_height % 16 == 0
+        ):
+            return ArcFaceONNX(model_file=onnx_file, session=session)
+        return None
+
+    @staticmethod
+    def _shape_dim(shape, index: int) -> Optional[int]:
+        try:
+            value = shape[index]
+        except Exception:
+            return None
+        try:
+            return int(value)
+        except (TypeError, ValueError):
+            return None
+
+    @staticmethod
+    def _is_scrfd_detection_outputs(outputs) -> bool:
+        return len(outputs) in {6, 9, 10, 15}
+
+    @staticmethod
+    def _quiet_onnxruntime_session_options():
+        try:
+            import onnxruntime
+
+            onnxruntime.set_default_logger_severity(3)
+            session_options = onnxruntime.SessionOptions()
+            session_options.log_severity_level = 3
+            return session_options
+        except Exception:
+            return None
 
     def _infer_embedding_dim(self) -> Optional[int]:
         for model in self.models.values():
@@ -251,6 +325,7 @@ class FaceEngine:
             "model_name": self.model_name,
             "model_dir": str(self.resolve_model_dir()),
             "providers": self.active_providers or self.requested_providers,
+            "detector": type(self.det_model).__name__ if self.det_model is not None else None,
             "det_size": self._det_size_label(),
             "embedding_dim": self.embedding_dim,
             "loaded": self.is_loaded(),
@@ -276,8 +351,7 @@ class FaceEngine:
         input_size = self._detector_input_size()
         if self._prepared_det_size == input_size:
             return
-        LOGGER.info("Preparing detection model with det_size=%s", input_size)
-        print("[InsightFace][FaceEngine] prepare detector det_size:", input_size)
+        LOGGER.debug("Preparing detection model with det_size=%s", input_size)
         self.det_model.prepare(self.ctx_id, input_size=input_size, det_thresh=0.5)
         self._prepared_det_size = input_size
 

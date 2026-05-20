@@ -1,14 +1,12 @@
 #!/usr/bin/env python
 import os
 import io
-import glob
 import re
-import shutil
 import sys
 import subprocess
 import platform
 import logging
-from setuptools import setup, find_packages
+from setuptools import setup, find_namespace_packages
 
 
 FACE3D_BUILD_FLAG = '--with-face3d'
@@ -43,7 +41,7 @@ try:
     long_description = pypandoc.convert_file('README.md', 'rst')
 except (IOError, ImportError, ModuleNotFoundError):
     print('WARNING: pandoc not enabled')
-    long_description = open('README.md').read()
+    long_description = read('README.md')
     pypandoc_enabled = False
 
 #import pypandoc
@@ -53,6 +51,8 @@ VERSION = find_version('insightface', '__init__.py')
 requirements = [
     'numpy',
     'onnx',
+    'onnxruntime',
+    'opencv-python',
     'tqdm',
     'requests',
     'matplotlib',
@@ -67,10 +67,7 @@ requirements = [
 
 gui_requirements = [
     'PySide6>=6.5',
-    'opencv-python',
     'pandas',
-    'Pillow',
-    'scikit-learn',
     'reportlab',
 ]
 
@@ -79,13 +76,21 @@ face3d_requirements = [
     'albumentations',
 ]
 
-data_images = list(glob.glob('insightface/data/images/*.jpg'))
-data_images += list(glob.glob('insightface/data/images/*.png'))
+package_data = {
+    "insightface.data.images": ["*.jpg", "*.jpeg", "*.png"],
+    "insightface.data.objects": ["*.pkl"],
+}
 
-data_objects = list(glob.glob('insightface/data/objects/*.pkl'))
-
-data_files = [ ('insightface/data/images', data_images) ]
-data_files += [ ('insightface/data/objects', data_objects) ]
+packages = find_namespace_packages(
+    include=("insightface", "insightface.*"),
+    exclude=("docs", "docs.*", "tests", "tests.*", "scripts", "scripts.*"),
+)
+if not build_face3d:
+    packages = [
+        package
+        for package in packages
+        if package != "insightface.thirdparty.face3d.mesh.cython"
+    ]
 
 ext_modules = []
 include_dirs = []
@@ -99,10 +104,13 @@ if build_face3d:
             Extension("insightface.thirdparty.face3d.mesh.cython.mesh_core_cython",
                 ["insightface/thirdparty/face3d/mesh/cython/mesh_core_cython.pyx", "insightface/thirdparty/face3d/mesh/cython/mesh_core.cpp"], language='c++'),
             ]
-    data_mesh = list(glob.glob('insightface/thirdparty/face3d/mesh/cython/*.h'))
-    data_mesh += list(glob.glob('insightface/thirdparty/face3d/mesh/cython/*.c'))
-    data_mesh += list(glob.glob('insightface/thirdparty/face3d/mesh/cython/*.py*'))
-    data_files += [ ('insightface/thirdparty/face3d/mesh/cython', data_mesh) ]
+    package_data["insightface.thirdparty.face3d.mesh.cython"] = [
+        "*.h",
+        "*.c",
+        "*.cpp",
+        "*.pyx",
+        "*.py",
+    ]
     ext_modules = cythonize(extensions)
     include_dirs = [numpy.get_include()]
     headers = ['insightface/thirdparty/face3d/mesh/cython/mesh_core.h']
@@ -156,10 +164,10 @@ setup(
     long_description_content_type='text/markdown',
     license='MIT',
     # Package info
-    packages=find_packages(exclude=('docs', 'tests', 'scripts')),
-    data_files=data_files,
+    packages=packages,
+    package_data=package_data,
     zip_safe=True,
-    include_package_data=True,
+    include_package_data=False,
     entry_points={
         "console_scripts": [
             "insightface-cli=insightface.commands.insightface_cli:main",

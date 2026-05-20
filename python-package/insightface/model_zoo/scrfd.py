@@ -13,9 +13,6 @@ import os
 import os.path as osp
 import cv2
 import sys
-import logging
-
-LOGGER = logging.getLogger("insightface.gui.detector")
 
 def softmax(z):
     assert len(z.shape) == 2
@@ -147,10 +144,7 @@ class SCRFD:
             self.det_thresh = det_thresh
         input_size = kwargs.get('input_size', None)
         if input_size is not None:
-            print('[InsightFace][SCRFD] prepare input_size:', input_size)
-            LOGGER.info("SCRFD prepare input_size=%s", input_size)
             if self.static_input_size is not None:
-                print('warning: det_size is fixed in scrfd model, ignore requested input_size')
                 self.input_size = self.static_input_size
                 self.input_sizes = [self.static_input_size]
             else:
@@ -232,10 +226,6 @@ class SCRFD:
     def detect(self, img, input_size = None, max_num=0, metric='default'):
         input_sizes = self._resolve_input_sizes(input_size)
         assert input_sizes
-        if not self._debug_det_size_printed:
-            print('[InsightFace][SCRFD] detect input_sizes:', input_sizes, 'image_shape:', img.shape)
-            LOGGER.info("SCRFD detect input_sizes=%s image_shape=%s", input_sizes, img.shape)
-            self._debug_det_size_printed = True
         pre_det_list = []
         kpss_det_list = []
         for input_size in input_sizes:
@@ -414,13 +404,13 @@ if __name__ == '__main__':
             print(kpss.shape)
         for i in range(bboxes.shape[0]):
             bbox = bboxes[i]
-            x1,y1,x2,y2,score = bbox.astype(np.int)
+            x1,y1,x2,y2,score = bbox.astype(int)
             cv2.rectangle(img, (x1,y1)  , (x2,y2) , (255,0,0) , 2)
             if kpss is not None:
                 kps = kpss[i]
                 for kp in kps:
-                    kp = kp.astype(np.int)
+                    kp = kp.astype(int)
                     cv2.circle(img, tuple(kp) , 1, (0,0,255) , 2)
-        filename = img_path.split('/')[-1]
+        filename = osp.basename(img_path)
         print('output:', filename)
-        cv2.imwrite('./outputs/%s'%filename, img)
+        cv2.imwrite(osp.join('outputs', filename), img)
