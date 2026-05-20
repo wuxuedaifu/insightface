@@ -3,7 +3,9 @@ from insightface.gui.core.paths import default_workspace
 
 
 def test_default_gui_workspace_path():
-    assert str(default_workspace()).endswith(".insightface/gui")
+    workspace = default_workspace()
+    assert workspace.name == "gui"
+    assert workspace.parent.name == ".insightface"
 
 
 def test_fallback_model_assets_have_github_release_urls(tmp_path):
