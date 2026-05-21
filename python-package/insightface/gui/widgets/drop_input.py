@@ -16,6 +16,8 @@ from PySide6.QtWidgets import (
     QVBoxLayout,
 )
 
+from ..core.tooltips import set_button_tooltip
+
 
 class DropInput(QFrame):
     pathsChanged = Signal(list)
@@ -64,6 +66,8 @@ class DropInput(QFrame):
         self.remove_button.setEnabled(False)
         self.select_button.clicked.connect(self.browse)
         self.remove_button.clicked.connect(self.clear)
+        set_button_tooltip(self.select_button)
+        set_button_tooltip(self.remove_button)
         buttons.addStretch(1)
         buttons.addWidget(self.select_button)
         buttons.addWidget(self.remove_button)

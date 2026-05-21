@@ -5,6 +5,7 @@ from __future__ import annotations
 from PySide6.QtWidgets import QGridLayout, QPushButton, QWidget
 
 from ..core.constants import LOCAL_PROCESSING_NOTICE, SUBTITLE
+from ..core.tooltips import set_button_tooltip
 from ..widgets.metric_card import MetricCard
 from .base import BasePage
 
@@ -41,6 +42,7 @@ class DashboardPage(BasePage):
         ):
             button = QPushButton(label)
             button.clicked.connect(lambda checked=False, target=page: self.window().open_page(target))
+            set_button_tooltip(button)
             shortcut_layout.addWidget(button, index // 3, index % 3)
         self.content.addWidget(shortcuts)
         self.content.addStretch(1)

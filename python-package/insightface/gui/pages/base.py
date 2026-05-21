@@ -18,6 +18,7 @@ from PySide6.QtWidgets import (
 )
 
 from ..core.constants import LOCAL_PROCESSING_NOTICE
+from ..core.tooltips import set_button_tooltip
 
 
 class BasePage(QWidget):
@@ -66,6 +67,7 @@ class BasePage(QWidget):
         btn = QPushButton(text)
         btn.clicked.connect(callback)
         btn.setEnabled(enabled)
+        set_button_tooltip(btn)
         return btn
 
     def choose_file(self, caption: str, filters: str = "Images (*.jpg *.jpeg *.png *.bmp *.webp);;All Files (*)") -> Optional[str]:

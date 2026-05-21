@@ -5,6 +5,7 @@ from __future__ import annotations
 from PySide6.QtWidgets import QGridLayout, QLabel, QPushButton, QWidget
 
 from ..core.constants import LOCAL_PROCESSING_NOTICE, RESPONSIBLE_USE_NOTICE
+from ..core.tooltips import set_button_tooltip
 from .base import BasePage
 
 
@@ -35,6 +36,7 @@ class ModeDashboardPage(BasePage):
             body_label.setStyleSheet("color:#4b5563; border:0;")
             button = QPushButton(action)
             button.clicked.connect(lambda checked=False, target=page_key: self.window().open_page(target))
+            set_button_tooltip(button, body)
             layout.addWidget(title_label, 0, 0)
             layout.addWidget(body_label, 1, 0)
             layout.addWidget(button, 2, 0)

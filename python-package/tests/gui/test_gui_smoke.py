@@ -5,7 +5,7 @@ import os
 def test_main_window_smoke(tmp_path):
     os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
     PySide6 = pytest.importorskip("PySide6")
-    from PySide6.QtWidgets import QApplication
+    from PySide6.QtWidgets import QApplication, QLabel, QPushButton
 
     from insightface.gui.app import StudioContext
     from insightface.gui.core.config import AppConfig
@@ -23,6 +23,12 @@ def test_main_window_smoke(tmp_path):
     engine = FaceEngine(model_name=cfg.model_name)
     window = MainWindow(StudioContext(cfg, True, storage, engine, str(tmp_path / "app.log")))
     window.show()
+    window.open_page("verification")
+    verification_page = window.page_registry.get("verification")
+    label_texts = [label.text() for label in verification_page.findChildren(QLabel)]
+    assert "Mode: waiting for gallery" not in label_texts
+    for button in verification_page.findChildren(QPushButton):
+        assert button.toolTip()
     for mode in AppMode:
         window.change_mode(mode)
         assert window.sidebar_list.count() > 0

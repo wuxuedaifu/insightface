@@ -40,6 +40,7 @@ from .core.navigation import (
     mode_from_value,
 )
 from .core.theme import application_stylesheet
+from .core.tooltips import apply_button_tooltips, set_button_tooltip
 from .dialogs.license_dialog import LicenseDialog
 from .dialogs.model_manager_dialog import ModelManagerDialog
 from .dialogs.settings_dialog import SettingsDialog
@@ -131,6 +132,7 @@ class FirstLaunchWizard(QDialog):
         buttons.accepted.connect(self.accept)
         buttons.rejected.connect(self.reject)
         layout.addWidget(buttons)
+        apply_button_tooltips(self)
 
     def browse_workspace(self) -> None:
         folder = QFileDialog.getExistingDirectory(self, "Select workspace", str(Path.home()))
@@ -238,6 +240,7 @@ class MainWindow(QMainWindow):
 
         self._build_menu()
         self._build_statusbar()
+        apply_button_tooltips(self)
         self.change_mode(self.current_mode, restore_last=True, save=False)
         self.refresh_statusbar()
         if not self.context.config_exists:
@@ -280,6 +283,7 @@ class MainWindow(QMainWindow):
     def _top_button(self, text: str, callback: Callable) -> QPushButton:
         button = QPushButton(text)
         button.clicked.connect(callback)
+        set_button_tooltip(button)
         return button
 
     def _build_menu(self) -> None:
@@ -383,6 +387,7 @@ class MainWindow(QMainWindow):
         page = self.page_registry.get(page_key)
         if self.stack.indexOf(page) < 0:
             self.stack.addWidget(page)
+        apply_button_tooltips(page)
         if hasattr(page, "refresh"):
             page.refresh()
         self.stack.setCurrentWidget(page)
@@ -427,6 +432,7 @@ class MainWindow(QMainWindow):
 
     def open_settings_dialog(self) -> None:
         dialog = SettingsDialog(self.context, self)
+        apply_button_tooltips(dialog)
         dialog.settingsSaved.connect(self._settings_saved)
         dialog.exec()
         self.refresh_statusbar()
@@ -442,6 +448,7 @@ class MainWindow(QMainWindow):
 
     def open_model_manager(self, initial: str | None = None) -> None:
         dialog = ModelManagerDialog(self.context, self)
+        apply_button_tooltips(dialog)
         dialog.modelChanged.connect(self.refresh_statusbar)
         if initial:
             dialog.open_page(initial)
@@ -450,6 +457,7 @@ class MainWindow(QMainWindow):
 
     def open_license_dialog(self) -> None:
         dialog = LicenseDialog(self.context, self)
+        apply_button_tooltips(dialog)
         dialog.exec()
         self.refresh_statusbar()
 

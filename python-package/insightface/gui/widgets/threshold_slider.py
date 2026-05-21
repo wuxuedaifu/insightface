@@ -6,11 +6,13 @@ from PySide6.QtCore import Signal
 from PySide6.QtWidgets import QHBoxLayout, QLabel, QSlider, QWidget
 from PySide6.QtCore import Qt
 
+from ..core.constants import DEFAULT_THRESHOLD
+
 
 class ThresholdSlider(QWidget):
     valueChanged = Signal(float)
 
-    def __init__(self, value: float = 0.5, parent=None):
+    def __init__(self, value: float = DEFAULT_THRESHOLD, parent=None):
         super().__init__(parent)
         self.label = QLabel()
         self.slider = QSlider(Qt.Horizontal)

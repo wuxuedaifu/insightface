@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from PySide6.QtWidgets import QLabel, QPushButton
 
+from ..core.tooltips import set_button_tooltip
 from .base import BasePage
 
 
@@ -27,6 +28,7 @@ class PlaceholderPage(BasePage):
             for label, page_key in ctas:
                 button = QPushButton(label)
                 button.clicked.connect(lambda checked=False, target=page_key: self.window().open_page(target))
+                set_button_tooltip(button)
                 buttons.append(button)
             self.content.addWidget(self.row(*buttons))
         self.content.addStretch(1)

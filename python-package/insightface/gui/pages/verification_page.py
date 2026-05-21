@@ -29,6 +29,7 @@ from PySide6.QtWidgets import (
 
 from ..core.constants import IMAGE_EXTENSIONS
 from ..core.recognition import compare_embeddings
+from ..core.tooltips import apply_button_tooltips, set_button_tooltip
 from ..core.utils import list_images, read_image
 from ..widgets.threshold_slider import ThresholdSlider
 from ..widgets.upload_preview import UploadPreview
@@ -71,6 +72,8 @@ class GalleryUploadPanel(QFrame):
         self.remove_button.clicked.connect(self.remove_selected)
         self.clear_button = QPushButton("Clear")
         self.clear_button.clicked.connect(self.clear)
+        set_button_tooltip(self.remove_button)
+        set_button_tooltip(self.clear_button)
         header.addWidget(title)
         header.addWidget(self.count_label)
         header.addStretch(1)
@@ -155,6 +158,7 @@ class GalleryUploadPanel(QFrame):
         buttons.accepted.connect(dialog.accept)
         buttons.rejected.connect(dialog.reject)
         layout.addWidget(buttons)
+        apply_button_tooltips(dialog)
         if dialog.exec() == QDialog.Accepted:
             indexes = tree.selectionModel().selectedRows(0)
             paths = [model.filePath(index) for index in indexes]
@@ -342,14 +346,13 @@ class VerificationPage(BasePage):
         self.content.addWidget(splitter, 1)
 
         control_row = QHBoxLayout()
-        self.mode_label = QLabel("Mode: waiting for gallery")
-        self.mode_label.setStyleSheet("font-weight:700;")
         self.threshold = ThresholdSlider(context.config.recognition_threshold)
         self.run_button = QPushButton("Run Recognition")
         self.run_button.clicked.connect(self.run_verification)
         self.clear_button = QPushButton("Clear")
         self.clear_button.clicked.connect(self.clear_all)
-        control_row.addWidget(self.mode_label)
+        set_button_tooltip(self.run_button)
+        set_button_tooltip(self.clear_button)
         control_row.addStretch(1)
         control_row.addWidget(self.run_button)
         control_row.addWidget(self.clear_button)
@@ -479,7 +482,6 @@ class VerificationPage(BasePage):
             self.results = payload["results"]
             self.query_input.set_faces([{"bbox": payload["query_bbox"], "label": "Query"}])
             self._populate_results()
-            self.mode_label.setText(f"Mode: {payload['mode']}")
             self.set_status(f"{payload['mode']} complete. {len(self.results)} gallery result(s).")
 
         self.run_task("Running verification", task, done)
@@ -517,13 +519,7 @@ class VerificationPage(BasePage):
         self.result_table.resizeColumnsToContents()
 
     def _update_mode_label(self) -> None:
-        if not self.gallery_paths:
-            mode = "waiting for gallery"
-        elif len(self.gallery_paths) == 1:
-            mode = "1:1 Compare"
-        else:
-            mode = "1:N Gallery Search"
-        self.mode_label.setText(f"Mode: {mode}")
+        pass
 
     @staticmethod
     def _error_row(path: str, message: str, threshold: float) -> dict:

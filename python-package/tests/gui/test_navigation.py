@@ -58,3 +58,17 @@ def test_default_detection_size_is_auto(tmp_path):
     assert cfg.det_size == [0, 0]
     assert cfg.det_size_label == "Auto"
     assert cfg.recognition_threshold == 0.28
+
+
+def test_threshold_slider_default_is_028():
+    import os
+    import pytest
+
+    os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+    pytest.importorskip("PySide6")
+    from PySide6.QtWidgets import QApplication
+    from insightface.gui.widgets.threshold_slider import ThresholdSlider
+
+    _app = QApplication.instance() or QApplication([])
+    slider = ThresholdSlider()
+    assert slider.value() == 0.28

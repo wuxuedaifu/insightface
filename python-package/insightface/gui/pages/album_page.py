@@ -26,6 +26,7 @@ from PySide6.QtWidgets import (
 
 from ..core.clustering import cluster_embeddings_dbscan
 from ..core.recognition import cosine_similarity, normalize_embedding
+from ..core.tooltips import set_button_tooltip
 from ..core.utils import list_images, read_image, save_image, timestamp_for_filename
 from .base import BasePage
 
@@ -188,6 +189,7 @@ class AlbumPage(BasePage):
     def _button(self, text: str, callback) -> QPushButton:
         button = QPushButton(text)
         button.clicked.connect(callback)
+        set_button_tooltip(button)
         return button
 
     def add_folder(self) -> None:

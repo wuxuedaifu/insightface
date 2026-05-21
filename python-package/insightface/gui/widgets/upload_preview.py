@@ -17,6 +17,7 @@ from PySide6.QtWidgets import (
     QVBoxLayout,
 )
 
+from ..core.tooltips import set_button_tooltip
 from .image_viewer import ImageViewer
 
 
@@ -88,7 +89,7 @@ class UploadPreview(QFrame):
 
         self.remove_button = QPushButton("×", self)
         self.remove_button.setObjectName("removeUpload")
-        self.remove_button.setToolTip("Remove")
+        set_button_tooltip(self.remove_button)
         self.remove_button.setFixedSize(22, 22)
         self.remove_button.clicked.connect(self.clear)
         self.remove_button.hide()
