@@ -98,6 +98,8 @@ class Storage:
                     file_size INTEGER,
                     mtime REAL,
                     sha256 TEXT,
+                    thumbnail BLOB,
+                    thumbnail_mime TEXT,
                     processed_at TEXT,
                     created_at TEXT
                 );
@@ -108,6 +110,8 @@ class Storage:
                     frame_index INTEGER,
                     timestamp_ms INTEGER,
                     crop_path TEXT,
+                    thumbnail BLOB,
+                    thumbnail_mime TEXT,
                     embedding BLOB,
                     embedding_dim INTEGER,
                     bbox_json TEXT,
@@ -165,6 +169,17 @@ class Storage:
                 );
                 """
             )
+            self._ensure_column(conn, "media_items", "thumbnail", "BLOB")
+            self._ensure_column(conn, "media_items", "thumbnail_mime", "TEXT")
+            self._ensure_column(conn, "media_faces", "thumbnail", "BLOB")
+            self._ensure_column(conn, "media_faces", "thumbnail_mime", "TEXT")
+
+    @staticmethod
+    def _ensure_column(conn: sqlite3.Connection, table: str, column: str, definition: str) -> None:
+        rows = conn.execute(f"PRAGMA table_info({table})").fetchall()
+        existing = {str(row["name"]) for row in rows}
+        if column not in existing:
+            conn.execute(f"ALTER TABLE {table} ADD COLUMN {column} {definition}")
 
     def add_person(
         self,
@@ -336,6 +351,8 @@ class Storage:
         file_size: Optional[int] = None,
         mtime: Optional[float] = None,
         sha256: Optional[str] = None,
+        thumbnail: Optional[bytes] = None,
+        thumbnail_mime: str = "image/webp",
         processed_at: Optional[str] = None,
     ) -> int:
         now = utc_now_iso()
@@ -344,11 +361,24 @@ class Storage:
                 """
                 INSERT OR IGNORE INTO media_items (
                     path, media_type, width, height, duration_ms, file_size,
-                    mtime, sha256, processed_at, created_at
+                    mtime, sha256, thumbnail, thumbnail_mime, processed_at, created_at
                 )
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
-                (path, media_type, width, height, duration_ms, file_size, mtime, sha256, processed_at, now),
+                (
+                    path,
+                    media_type,
+                    width,
+                    height,
+                    duration_ms,
+                    file_size,
+                    mtime,
+                    sha256,
+                    thumbnail,
+                    thumbnail_mime if thumbnail else "",
+                    processed_at,
+                    now,
+                ),
             )
             row = conn.execute("SELECT id FROM media_items WHERE path=?", (path,)).fetchone()
             return int(row["id"])
@@ -358,6 +388,8 @@ class Storage:
         media_id: int,
         embedding: np.ndarray | Iterable[float] | None,
         crop_path: str = "",
+        thumbnail: Optional[bytes] = None,
+        thumbnail_mime: str = "image/webp",
         bbox: Optional[Iterable[float]] = None,
         kps: Optional[Iterable[Iterable[float]]] = None,
         det_score: float = 0.0,
@@ -376,17 +408,19 @@ class Storage:
             cur = conn.execute(
                 """
                 INSERT INTO media_faces (
-                    media_id, frame_index, timestamp_ms, crop_path, embedding, embedding_dim,
+                    media_id, frame_index, timestamp_ms, crop_path, thumbnail, thumbnail_mime, embedding, embedding_dim,
                     bbox_json, kps_json, det_score, quality_score, assigned_person_id,
                     predicted_person_id, similarity, cluster_id, status, created_at, updated_at
                 )
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     media_id,
                     frame_index,
                     timestamp_ms,
                     crop_path,
+                    thumbnail,
+                    thumbnail_mime if thumbnail else "",
                     blob,
                     dim,
                     safe_json_dumps(list(bbox) if bbox is not None else None),
@@ -593,6 +627,7 @@ class Storage:
                 "photo_count": int(cluster.get("photo_count") or 0),
                 "avg_quality": float(cluster.get("avg_quality") or 0.0),
                 "thumbnail_path": cluster.get("thumbnail_path") or "",
+                "thumbnail_face_id": cluster.get("thumbnail_face_id"),
                 "photos": list(cluster.get("photos") or []),
                 "face_ids": face_ids,
             }
@@ -672,7 +707,9 @@ class Storage:
         with self.connect() as conn:
             rows = conn.execute(
                 """
-                SELECT mf.*, mi.path AS media_path, mi.media_type, mi.width, mi.height
+                SELECT mf.*, mi.path AS media_path, mi.media_type, mi.width, mi.height,
+                       mi.thumbnail AS media_thumbnail,
+                       mi.thumbnail_mime AS media_thumbnail_mime
                 FROM media_faces mf
                 JOIN media_items mi ON mi.id = mf.media_id
                 WHERE mf.embedding IS NOT NULL

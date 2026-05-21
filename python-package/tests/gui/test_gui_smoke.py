@@ -6,6 +6,7 @@ from pathlib import Path
 def test_main_window_smoke(tmp_path):
     os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
     PySide6 = pytest.importorskip("PySide6")
+    from PySide6.QtCore import Qt
     from PySide6.QtWidgets import QAbstractItemView, QApplication, QLabel, QPushButton
 
     from insightface.gui.app import StudioContext, configure_qt_plugin_paths
@@ -67,6 +68,11 @@ def test_main_window_smoke(tmp_path):
     assert album_page.cluster_table.horizontalHeaderItem(1).text() == "Photos"
     assert album_page.cluster_table.selectionBehavior() == QAbstractItemView.SelectRows
     assert album_page.photo_table.selectionBehavior() == QAbstractItemView.SelectRows
+    album_page.clusters = [{"id": 1, "photo_count": 2, "face_count": 3, "name": "Album Person 1"}]
+    album_page.cluster_items = {1: []}
+    album_page._populate_clusters()
+    assert album_page.cluster_table.item(0, 0).textAlignment() == Qt.AlignCenter
+    assert album_page.cluster_table.item(0, 1).textAlignment() == Qt.AlignCenter
     for mode in AppMode:
         window.change_mode(mode)
         assert window.sidebar_list.count() > 0

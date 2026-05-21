@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+from io import BytesIO
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Iterable, Optional
@@ -57,6 +58,41 @@ def save_image(path: str | os.PathLike[str], image: np.ndarray) -> bool:
             return True
         except Exception:
             return False
+
+
+def encode_webp_thumbnail(
+    image: np.ndarray | None,
+    max_side: int,
+    quality: int,
+) -> bytes | None:
+    """Encode an image array as a small WebP thumbnail.
+
+    GUI image arrays are BGR when loaded through OpenCV. The helper converts to
+    RGB for Pillow, keeps aspect ratio, and returns compressed bytes for SQLite.
+    """
+
+    if image is None or image.size == 0:
+        return None
+    try:
+        from PIL import Image
+
+        arr = np.asarray(image)
+        if arr.ndim == 3 and arr.shape[2] >= 3:
+            arr = arr[..., :3][..., ::-1]
+        pil_image = Image.fromarray(arr).convert("RGB")
+        width, height = pil_image.size
+        longest = max(width, height)
+        if longest <= 0:
+            return None
+        scale = min(1.0, float(max_side) / float(longest))
+        target = (max(1, int(round(width * scale))), max(1, int(round(height * scale))))
+        if target != pil_image.size:
+            pil_image = pil_image.resize(target, Image.Resampling.LANCZOS)
+        buffer = BytesIO()
+        pil_image.save(buffer, format="WEBP", quality=int(quality), method=6)
+        return buffer.getvalue()
+    except Exception:
+        return None
 
 
 def crop_bbox(image: np.ndarray, bbox: Iterable[float], padding: float = 0.10) -> np.ndarray:

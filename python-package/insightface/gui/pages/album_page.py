@@ -28,7 +28,7 @@ from ..core.clustering import cluster_embeddings_hdbscan_auto, hdbscan_status
 from ..core.constants import DEFAULT_THRESHOLD
 from ..core.recognition import cosine_similarity, normalize_embedding
 from ..core.tooltips import set_button_tooltip
-from ..core.utils import list_images, read_image, save_image, timestamp_for_filename
+from ..core.utils import crop_bbox, encode_webp_thumbnail, list_images, read_image, timestamp_for_filename
 from ..widgets.table_utils import configure_table_columns, refresh_table_columns
 from .base import BasePage
 
@@ -319,23 +319,20 @@ class AlbumPage(BasePage):
                     height=image.shape[0],
                     file_size=Path(path).stat().st_size if Path(path).exists() else None,
                     mtime=Path(path).stat().st_mtime if Path(path).exists() else None,
+                    thumbnail=encode_webp_thumbnail(image, max_side=120, quality=35),
                     processed_at=timestamp_for_filename(),
                 )
-                for face_index, face in enumerate(self.context.engine.detect_faces(image, source_path=path)):
+                for face in self.context.engine.detect_faces(image, source_path=path):
                     if face.normed_embedding is None:
                         continue
                     if self._face_box_size(face.bbox) < min_face_size:
                         continue
-                    crop_path = str(
-                        Path(self.context.config.crop_dir)
-                        / f"album_{media_id}_{face_index}_{timestamp_for_filename()}.png"
-                    )
-                    if face.crop is not None:
-                        save_image(crop_path, face.crop)
+                    face_image = face.crop if face.crop is not None else crop_bbox(image, face.bbox)
                     self.context.storage.add_media_face(
                         media_id,
                         face.normed_embedding,
-                        crop_path=crop_path,
+                        crop_path="",
+                        thumbnail=encode_webp_thumbnail(face_image, max_side=80, quality=70),
                         bbox=face.bbox,
                         kps=face.kps,
                         det_score=face.det_score,
@@ -467,7 +464,8 @@ class AlbumPage(BasePage):
                 "face_count": len(items),
                 "photo_count": len(photos),
                 "avg_quality": sum(float(item.get("quality_score") or 0.0) for item in items) / max(1, len(items)),
-                "thumbnail_path": representative.get("crop_path") or representative.get("media_path"),
+                "thumbnail_face_id": representative.get("id"),
+                "thumbnail_path": representative.get("media_path"),
                 "photos": photos,
             }
             clusters.append(cluster)
@@ -547,10 +545,11 @@ class AlbumPage(BasePage):
             for col, value in enumerate(values):
                 item = QTableWidgetItem(str(value))
                 if col == 0:
-                    icon = self._icon(cluster.get("thumbnail_path"), QSize(56, 56))
+                    icon = self._cluster_thumbnail_icon(cluster, QSize(56, 56))
                     if icon:
                         item.setIcon(icon)
                 item.setData(Qt.UserRole, cluster.get("id"))
+                item.setTextAlignment(Qt.AlignCenter)
                 item.setToolTip(
                     f"ID: {cluster.get('id', '')}\n"
                     f"Name: {cluster.get('name', '')}\n"
@@ -575,20 +574,23 @@ class AlbumPage(BasePage):
 
     def _populate_photos(self, cluster_id: int) -> None:
         items = self.cluster_items.get(cluster_id, [])
-        grouped: dict[str, int] = defaultdict(int)
+        grouped: dict[str, dict] = {}
         for item in items:
-            grouped[item["media_path"]] += 1
+            path = item["media_path"]
+            if path not in grouped:
+                grouped[path] = {"count": 0, "thumbnail": item.get("media_thumbnail")}
+            grouped[path]["count"] += 1
         if not grouped:
             for cluster in self.clusters:
                 if int(cluster.get("id", -1)) == cluster_id:
                     for path in cluster.get("photos", []):
-                        grouped[str(path)] += 1
+                        grouped[str(path)] = {"count": 1, "thumbnail": None}
                     break
         rows = sorted(grouped.items())
         self.photo_table.setRowCount(len(rows))
-        for row, (path, count) in enumerate(rows):
+        for row, (path, data) in enumerate(rows):
             thumb = QTableWidgetItem("")
-            icon = self._icon(path, QSize(96, 72))
+            icon = self._icon_from_bytes(data.get("thumbnail"), QSize(96, 72))
             if icon:
                 thumb.setIcon(icon)
             thumb.setData(Qt.UserRole, path)
@@ -596,7 +598,7 @@ class AlbumPage(BasePage):
             file_item.setData(Qt.UserRole, path)
             self.photo_table.setItem(row, 0, thumb)
             self.photo_table.setItem(row, 1, file_item)
-            self.photo_table.setItem(row, 2, QTableWidgetItem(str(count)))
+            self.photo_table.setItem(row, 2, QTableWidgetItem(str(data["count"])))
             self.photo_table.setRowHeight(row, 80)
         refresh_table_columns(self.photo_table)
 
@@ -616,11 +618,25 @@ class AlbumPage(BasePage):
             return 0.0
         return min(abs(x2 - x1), abs(y2 - y1))
 
+    def _cluster_thumbnail_icon(self, cluster: dict, size: QSize) -> QIcon | None:
+        thumbnail_face_id = cluster.get("thumbnail_face_id")
+        if thumbnail_face_id is not None:
+            for item in self.cluster_items.get(int(cluster.get("id", -1)), []):
+                if item.get("id") == thumbnail_face_id:
+                    return self._icon_from_bytes(item.get("thumbnail"), size)
+        for item in self.cluster_items.get(int(cluster.get("id", -1)), []):
+            icon = self._icon_from_bytes(item.get("thumbnail"), size)
+            if icon is not None:
+                return icon
+        return None
+
     @staticmethod
-    def _icon(path: str | None, size: QSize) -> QIcon | None:
-        if not path:
+    def _icon_from_bytes(data, size: QSize) -> QIcon | None:
+        if not data:
             return None
-        pixmap = QPixmap(str(Path(path)))
+        pixmap = QPixmap()
+        if not pixmap.loadFromData(bytes(data), b"WEBP"):
+            return None
         if pixmap.isNull():
             return None
         return QIcon(pixmap.scaled(size, Qt.KeepAspectRatio, Qt.SmoothTransformation))
