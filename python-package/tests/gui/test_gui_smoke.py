@@ -55,6 +55,16 @@ def test_main_window_smoke(tmp_path):
     face_swap_page = window.page_registry.get("image_face_swap")
     assert face_swap_page.output_view.objectName() == "imageViewer"
     assert face_swap_page.output_view.viewport().objectName() == "imageViewerViewport"
+    album_page = window.page_registry.get("album")
+    assert not hasattr(album_page, "cluster_threshold")
+    assert not hasattr(album_page, "match_threshold")
+    assert album_page.min_face_size.value() == 80
+    assert album_page.algorithm_label.text().startswith("Algorithm: HDBSCAN")
+    assert album_page.cluster_table.columnCount() == 2
+    assert album_page.cluster_table.horizontalHeaderItem(0).text() == "Thumbnail"
+    assert album_page.cluster_table.horizontalHeaderItem(1).text() == "Photos"
+    assert album_page.cluster_table.selectionBehavior() == QAbstractItemView.SelectRows
+    assert album_page.photo_table.selectionBehavior() == QAbstractItemView.SelectRows
     for mode in AppMode:
         window.change_mode(mode)
         assert window.sidebar_list.count() > 0

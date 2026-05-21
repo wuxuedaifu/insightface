@@ -44,11 +44,21 @@ def test_album_directories_and_results_persist(tmp_path):
         "thumbnail_path": str(image_path),
         "photos": [str(image_path)],
     }
-    storage.save_album_results([cluster], {1: [{"id": face_id, "media_path": str(image_path)}]}, "DBSCAN", 0.28, 0.28, 2)
+    storage.save_album_results(
+        [cluster],
+        {1: [{"id": face_id, "media_path": str(image_path)}]},
+        "HDBSCAN",
+        cluster_threshold=None,
+        duplicate_threshold=0.28,
+        min_samples=2,
+        min_face_size=80,
+    )
 
     results = storage.load_album_results()
-    assert results["cluster_threshold"] == 0.28
+    assert results["algorithm"] == "HDBSCAN"
+    assert results["cluster_threshold"] is None
     assert results["duplicate_threshold"] == 0.28
+    assert results["min_face_size"] == 80
     assert results["clusters"][0]["face_ids"] == [face_id]
     assert storage.list_media_faces()[0]["cluster_id"] == 1
 

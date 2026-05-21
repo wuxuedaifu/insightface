@@ -9,8 +9,8 @@ import numpy as np
 from PySide6.QtCore import QEvent, QSize, Qt, QUrl, Signal
 from PySide6.QtGui import QCursor, QDesktopServices, QIcon, QPixmap
 from PySide6.QtWidgets import (
+    QAbstractItemView,
     QFileDialog,
-    QDoubleSpinBox,
     QHBoxLayout,
     QLabel,
     QListWidget,
@@ -24,12 +24,16 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from ..core.clustering import cluster_embeddings_dbscan
+from ..core.clustering import cluster_embeddings_hdbscan_auto
+from ..core.constants import DEFAULT_THRESHOLD
 from ..core.recognition import cosine_similarity, normalize_embedding
 from ..core.tooltips import set_button_tooltip
 from ..core.utils import list_images, read_image, save_image, timestamp_for_filename
 from ..widgets.table_utils import configure_table_columns, refresh_table_columns
 from .base import BasePage
+
+DEFAULT_ALBUM_MIN_FACE_SIZE = 80
+DEFAULT_ALBUM_DUPLICATE_DISTANCE = DEFAULT_THRESHOLD
 
 
 class AlbumDirectoryList(QListWidget):
@@ -41,6 +45,7 @@ class AlbumDirectoryList(QListWidget):
         self.setAcceptDrops(True)
         self.setMouseTracking(True)
         self.setSelectionMode(QListWidget.ExtendedSelection)
+        self.setToolTip("Drag one or more album folders here, or use Add Folder.")
         self.setProperty("hoverActive", False)
         self.setProperty("dragActive", False)
         self.installEventFilter(self)
@@ -56,7 +61,14 @@ class AlbumDirectoryList(QListWidget):
         return [self.item(index).text() for index in range(self.count())]
 
     def dragEnterEvent(self, event) -> None:  # noqa: N802
-        if event.mimeData().hasUrls() and any(Path(url.toLocalFile()).is_dir() for url in event.mimeData().urls() if url.isLocalFile()):
+        if self._has_folder_urls(event):
+            self._drag(True)
+            event.acceptProposedAction()
+        else:
+            event.ignore()
+
+    def dragMoveEvent(self, event) -> None:  # noqa: N802
+        if self._has_folder_urls(event):
             self._drag(True)
             event.acceptProposedAction()
         else:
@@ -82,6 +94,14 @@ class AlbumDirectoryList(QListWidget):
         self.setProperty("dragActive", active)
         self.style().unpolish(self)
         self.style().polish(self)
+
+    @staticmethod
+    def _has_folder_urls(event) -> bool:
+        return event.mimeData().hasUrls() and any(
+            Path(url.toLocalFile()).is_dir()
+            for url in event.mimeData().urls()
+            if url.isLocalFile()
+        )
 
     def eventFilter(self, watched, event) -> bool:  # noqa: N802
         if event.type() == QEvent.Enter:
@@ -125,12 +145,20 @@ class AlbumPage(BasePage):
         controls = QWidget()
         controls_layout = QVBoxLayout(controls)
         controls_layout.setContentsMargins(0, 0, 0, 0)
-        self.content.addWidget(self.notice("All album processing is local. New image files are detected on refresh; existing indexed files are reused for clustering."))
+        self.content.addWidget(
+            self.notice(
+                "All album processing is local. Import / Refresh scans every selected folder, extracts features "
+                "only for new images, then runs a complete automatic HDBSCAN clustering pass over indexed faces."
+            )
+        )
         self.folder_list = AlbumDirectoryList()
         self.folder_list.setMinimumHeight(90)
         self.folder_list.foldersChanged.connect(self._save_directories)
         controls_layout.addWidget(QLabel("Album directories"))
         controls_layout.addWidget(self.folder_list)
+        hint = QLabel("Drag album folders into the directory list, or click Add Folder.")
+        hint.setProperty("role", "muted")
+        controls_layout.addWidget(hint)
         button_row = QHBoxLayout()
         for button in [
             self._button("Add Folder", self.add_folder),
@@ -143,40 +171,42 @@ class AlbumPage(BasePage):
         button_row.addStretch(1)
         controls_layout.addLayout(button_row)
 
-        threshold_row = QHBoxLayout()
-        self.cluster_threshold = QDoubleSpinBox()
-        self.cluster_threshold.setRange(0.01, 0.99)
-        self.cluster_threshold.setSingleStep(0.01)
-        self.cluster_threshold.setValue(0.28)
-        self.match_threshold = QDoubleSpinBox()
-        self.match_threshold.setRange(0.01, 0.99)
-        self.match_threshold.setSingleStep(0.01)
-        self.match_threshold.setValue(0.28)
+        settings_row = QHBoxLayout()
         self.min_cluster_size = QSpinBox()
         self.min_cluster_size.setRange(2, 50)
         self.min_cluster_size.setValue(2)
-        self.algorithm_label = QLabel("Algorithm: DBSCAN")
-        threshold_row.addWidget(QLabel("DBSCAN distance threshold"))
-        threshold_row.addWidget(self.cluster_threshold)
-        threshold_row.addWidget(QLabel("Existing ID duplicate distance"))
-        threshold_row.addWidget(self.match_threshold)
-        threshold_row.addWidget(QLabel("Min samples"))
-        threshold_row.addWidget(self.min_cluster_size)
-        threshold_row.addWidget(self.algorithm_label)
-        threshold_row.addStretch(1)
-        controls_layout.addLayout(threshold_row)
+        self.min_face_size = QSpinBox()
+        self.min_face_size.setRange(1, 4096)
+        self.min_face_size.setValue(DEFAULT_ALBUM_MIN_FACE_SIZE)
+        self.min_face_size.setToolTip(
+            "Faces whose bounding box width or height is smaller than this value are skipped."
+        )
+        self.algorithm_label = QLabel("Algorithm: HDBSCAN (auto)")
+        settings_row.addWidget(QLabel("HDBSCAN min cluster size"))
+        settings_row.addWidget(self.min_cluster_size)
+        settings_row.addWidget(QLabel("Minimum face size"))
+        settings_row.addWidget(self.min_face_size)
+        settings_row.addWidget(self.algorithm_label)
+        settings_row.addStretch(1)
+        controls_layout.addLayout(settings_row)
         self.content.addWidget(controls)
 
         splitter = QSplitter(Qt.Horizontal)
-        self.cluster_table = QTableWidget(0, 7)
+        self.cluster_table = QTableWidget(0, 2)
         self.cluster_table.setIconSize(QSize(56, 56))
-        self.cluster_table.setHorizontalHeaderLabels(["ID", "Thumbnail", "Name", "Faces", "Photos", "Avg quality", "Source"])
-        configure_table_columns(self.cluster_table, [70, 100, 190, 70, 70, 100, 180])
+        self.cluster_table.setSelectionBehavior(QAbstractItemView.SelectRows)
+        self.cluster_table.setSelectionMode(QAbstractItemView.SingleSelection)
+        self.cluster_table.setEditTriggers(QAbstractItemView.NoEditTriggers)
+        self.cluster_table.setHorizontalHeaderLabels(["Thumbnail", "Photos"])
+        configure_table_columns(self.cluster_table, [120, 80])
         self.cluster_table.currentCellChanged.connect(self.cluster_selected)
         splitter.addWidget(self.cluster_table)
 
         self.photo_table = QTableWidget(0, 3)
         self.photo_table.setIconSize(QSize(96, 72))
+        self.photo_table.setSelectionBehavior(QAbstractItemView.SelectRows)
+        self.photo_table.setSelectionMode(QAbstractItemView.SingleSelection)
+        self.photo_table.setEditTriggers(QAbstractItemView.NoEditTriggers)
         self.photo_table.setHorizontalHeaderLabels(["Thumbnail", "File", "Faces in cluster"])
         configure_table_columns(self.photo_table, [120, 360, 130])
         self.photo_table.cellDoubleClicked.connect(self.open_photo)
@@ -251,9 +281,8 @@ class AlbumPage(BasePage):
         if not all_paths:
             self.show_error("No supported images found in the selected directories.")
             return
-        cluster_threshold = float(self.cluster_threshold.value())
-        duplicate_threshold = float(self.match_threshold.value())
-        min_samples = int(self.min_cluster_size.value())
+        min_cluster_size = int(self.min_cluster_size.value())
+        min_face_size = int(self.min_face_size.value())
         existing = set() if rebuild else self.context.storage.existing_media_paths(all_paths)
         new_paths = list(all_paths) if rebuild else [path for path in all_paths if path not in existing]
 
@@ -283,7 +312,12 @@ class AlbumPage(BasePage):
                 for face_index, face in enumerate(self.context.engine.detect_faces(image, source_path=path)):
                     if face.normed_embedding is None:
                         continue
-                    crop_path = str(Path(self.context.config.crop_dir) / f"album_{media_id}_{face_index}_{timestamp_for_filename()}.png")
+                    if self._face_box_size(face.bbox) < min_face_size:
+                        continue
+                    crop_path = str(
+                        Path(self.context.config.crop_dir)
+                        / f"album_{media_id}_{face_index}_{timestamp_for_filename()}.png"
+                    )
                     if face.crop is not None:
                         save_image(crop_path, face.crop)
                     self.context.storage.add_media_face(
@@ -299,18 +333,29 @@ class AlbumPage(BasePage):
                     faces_saved += 1
                 imported += 1
                 if progress:
-                    progress(index + 1, max(1, len(new_paths)), f"Imported {imported} new images, saved {faces_saved} faces")
-            faces = self._faces_for_folders(folders)
-            clusters, algorithm = self._cluster_faces(faces, cluster_threshold, duplicate_threshold, min_samples)
+                    progress(
+                        index + 1,
+                        max(1, len(new_paths)),
+                        f"Imported {imported} new images, saved {faces_saved} faces",
+                    )
+            faces = self._faces_for_folders(folders, min_face_size)
+            clusters, algorithm = self._cluster_faces(faces, min_cluster_size)
             self.context.storage.save_album_results(
                 clusters,
                 self.cluster_items,
                 algorithm,
-                cluster_threshold=cluster_threshold,
-                duplicate_threshold=duplicate_threshold,
-                min_samples=min_samples,
+                cluster_threshold=None,
+                duplicate_threshold=DEFAULT_ALBUM_DUPLICATE_DISTANCE,
+                min_samples=min_cluster_size,
+                min_face_size=min_face_size,
             )
-            return {"deleted": deleted, "imported": imported, "faces_saved": faces_saved, "clusters": clusters, "algorithm": algorithm}
+            return {
+                "deleted": deleted,
+                "imported": imported,
+                "faces_saved": faces_saved,
+                "clusters": clusters,
+                "algorithm": algorithm,
+            }
 
         def done(result):
             self.clusters = result["clusters"]
@@ -323,11 +368,14 @@ class AlbumPage(BasePage):
                     f"built {len(self.clusters)} cluster(s)."
                 )
             else:
-                self.set_status(f"Imported {result['imported']} new image(s), saved {result['faces_saved']} face(s), built {len(self.clusters)} cluster(s).")
+                self.set_status(
+                    f"Imported {result['imported']} new image(s), saved {result['faces_saved']} face(s), "
+                    f"built {len(self.clusters)} cluster(s)."
+                )
 
         self.run_task("Rebuilding album" if rebuild else "Importing and clustering album", task, done)
 
-    def _faces_for_folders(self, folders: list[Path]) -> list[dict]:
+    def _faces_for_folders(self, folders: list[Path], min_face_size: int) -> list[dict]:
         roots = [folder.resolve() for folder in folders]
         faces = []
         for face in self.context.storage.list_media_faces():
@@ -336,22 +384,22 @@ class AlbumPage(BasePage):
             except Exception:
                 continue
             if any(media_path == root or root in media_path.parents for root in roots):
-                if face.get("embedding") is not None:
+                if (
+                    face.get("embedding") is not None
+                    and self._face_box_size(face.get("bbox")) >= min_face_size
+                ):
                     faces.append(face)
         return faces
 
     def _cluster_faces(
         self,
         faces: list[dict],
-        cluster_threshold: float,
-        duplicate_threshold: float,
-        min_samples: int,
+        min_cluster_size: int,
     ) -> tuple[list[dict], str]:
         embeddings = [face["embedding"] for face in faces]
-        labels, algorithm = cluster_embeddings_dbscan(
+        labels, algorithm = cluster_embeddings_hdbscan_auto(
             embeddings,
-            distance_threshold=cluster_threshold,
-            min_samples=min_samples,
+            min_cluster_size=min_cluster_size,
         )
         groups: dict[int, list[dict]] = defaultdict(list)
         next_noise = max(labels, default=-1) + 1
@@ -384,7 +432,7 @@ class AlbumPage(BasePage):
                     best_person_name = sample.get("person_name") or ""
             source = (
                 "existing"
-                if best_person_id is not None and (1.0 - best_score) <= duplicate_threshold
+                if best_person_id is not None and (1.0 - best_score) <= DEFAULT_ALBUM_DUPLICATE_DISTANCE
                 else "album"
             )
             if source == "existing":
@@ -445,34 +493,33 @@ class AlbumPage(BasePage):
             face_ids = [int(face_id) for face_id in cluster.get("face_ids", []) if str(face_id).isdigit()]
             self.cluster_items[cluster_id] = [faces_by_id[face_id] for face_id in face_ids if face_id in faces_by_id]
             self.clusters.append(cluster)
-        self.algorithm_label.setText(f"Algorithm: {data.get('algorithm', 'DBSCAN')}")
-        if data.get("cluster_threshold") is not None:
-            self.cluster_threshold.setValue(float(data["cluster_threshold"]))
-        if data.get("duplicate_threshold") is not None:
-            self.match_threshold.setValue(float(data["duplicate_threshold"]))
+        self.algorithm_label.setText(f"Algorithm: {data.get('algorithm', 'HDBSCAN')}")
         if data.get("min_samples") is not None:
             self.min_cluster_size.setValue(int(data["min_samples"]))
+        if data.get("min_face_size") is not None:
+            self.min_face_size.setValue(int(data["min_face_size"]))
         self._populate_clusters()
 
     def _populate_clusters(self) -> None:
         self.cluster_table.setRowCount(len(self.clusters))
         for row, cluster in enumerate(self.clusters):
             values = [
-                cluster.get("id", ""),
                 "",
-                cluster.get("name", ""),
-                cluster.get("face_count", 0),
                 cluster.get("photo_count", 0),
-                f"{float(cluster.get('avg_quality') or 0.0):.3f}",
-                cluster.get("source", "album"),
             ]
             for col, value in enumerate(values):
                 item = QTableWidgetItem(str(value))
-                if col == 1:
+                if col == 0:
                     icon = self._icon(cluster.get("thumbnail_path"), QSize(56, 56))
                     if icon:
                         item.setIcon(icon)
                 item.setData(Qt.UserRole, cluster.get("id"))
+                item.setToolTip(
+                    f"ID: {cluster.get('id', '')}\n"
+                    f"Name: {cluster.get('name', '')}\n"
+                    f"Faces: {cluster.get('face_count', 0)}\n"
+                    f"Photos: {cluster.get('photo_count', 0)}"
+                )
                 self.cluster_table.setItem(row, col, item)
             self.cluster_table.setRowHeight(row, 64)
         refresh_table_columns(self.cluster_table)
@@ -523,6 +570,14 @@ class AlbumPage(BasePage):
         path = item.data(Qt.UserRole)
         if path:
             QDesktopServices.openUrl(QUrl.fromLocalFile(str(path)))
+
+    @staticmethod
+    def _face_box_size(bbox) -> float:
+        try:
+            x1, y1, x2, y2 = [float(value) for value in bbox[:4]]
+        except Exception:
+            return 0.0
+        return min(abs(x2 - x1), abs(y2 - y1))
 
     @staticmethod
     def _icon(path: str | None, size: QSize) -> QIcon | None:

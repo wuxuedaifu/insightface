@@ -570,9 +570,10 @@ class Storage:
         clusters: Iterable[Dict[str, Any]],
         cluster_items: Dict[int, List[Dict[str, Any]]],
         algorithm: str,
-        cluster_threshold: float,
-        duplicate_threshold: float,
-        min_samples: int,
+        cluster_threshold: Optional[float] = None,
+        duplicate_threshold: Optional[float] = None,
+        min_samples: int = 2,
+        min_face_size: Optional[int] = None,
     ) -> None:
         now = utc_now_iso()
         serializable_clusters: List[Dict[str, Any]] = []
@@ -599,9 +600,10 @@ class Storage:
         payload = {
             "version": 1,
             "algorithm": algorithm,
-            "cluster_threshold": float(cluster_threshold),
-            "duplicate_threshold": float(duplicate_threshold),
+            "cluster_threshold": float(cluster_threshold) if cluster_threshold is not None else None,
+            "duplicate_threshold": float(duplicate_threshold) if duplicate_threshold is not None else None,
             "min_samples": int(min_samples),
+            "min_face_size": int(min_face_size) if min_face_size is not None else None,
             "clusters": serializable_clusters,
             "updated_at": now,
         }
