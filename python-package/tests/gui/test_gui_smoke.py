@@ -36,7 +36,17 @@ def test_main_window_smoke(tmp_path):
     verification_page = window.page_registry.get("verification")
     assert abs(window.context.config.recognition_threshold - 0.28) < 1e-9
     assert abs(verification_page.threshold.value() - 0.28) < 1e-9
+    notice = verification_page.findChild(QLabel, "noticeLabel")
+    assert notice is not None
+    assert "Gallery face embeddings are cached in memory" in notice.text()
     assert hasattr(verification_page.result_table, "_proportional_table_sizer")
+    assert verification_page.result_table.selectionBehavior() == QAbstractItemView.SelectRows
+    assert verification_page.result_table.selectionMode() == QAbstractItemView.SingleSelection
+    verification_page._gallery_embedding_cache_key = ("old.jpg",)
+    verification_page._gallery_embedding_cache = [{"path": "old.jpg"}]
+    verification_page.set_gallery_paths(["new.jpg"])
+    assert verification_page._gallery_embedding_cache_key is None
+    assert verification_page._gallery_embedding_cache is None
     label_texts = [label.text() for label in verification_page.findChildren(QLabel)]
     assert "Mode: waiting for gallery" not in label_texts
     for button in verification_page.findChildren(QPushButton):

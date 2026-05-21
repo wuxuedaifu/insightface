@@ -311,12 +311,20 @@ class VerificationPage(BasePage):
         self.query_path = ""
         self.query_image: np.ndarray | None = None
         self.gallery_paths: list[str] = []
+        self._gallery_embedding_cache_key: tuple[str, ...] | None = None
+        self._gallery_embedding_cache: list[dict] | None = None
         self.results: list[dict] = []
         if abs(float(context.config.recognition_threshold) - DEFAULT_THRESHOLD) > 1e-9:
             context.config.recognition_threshold = DEFAULT_THRESHOLD
             save_config(context.config)
 
-        self.content.addWidget(self.notice("All processing is local by default. Uploaded query and gallery files are not copied or uploaded automatically."))
+        self.content.addWidget(
+            self.notice(
+                "All processing is local by default. Uploaded query and gallery files are not copied or uploaded automatically. "
+                "Gallery face embeddings are cached in memory after the first run and reused while the gallery image list is unchanged. "
+                "Changing only the query image reuses the cached gallery; adding, removing, or clearing gallery images clears and recomputes it."
+            )
+        )
         splitter = QSplitter(Qt.Horizontal)
         left = QWidget()
         left_layout = QVBoxLayout(left)
@@ -363,6 +371,9 @@ class VerificationPage(BasePage):
 
         self.result_table = QTableWidget(0, 7)
         self.result_table.setIconSize(QSize(56, 56))
+        self.result_table.setSelectionBehavior(QAbstractItemView.SelectRows)
+        self.result_table.setSelectionMode(QAbstractItemView.SingleSelection)
+        self.result_table.setEditTriggers(QAbstractItemView.NoEditTriggers)
         self.result_table.setHorizontalHeaderLabels(
             ["rank", "thumbnail", "gallery_file", "similarity", "threshold", "decision", "det_score"]
         )
@@ -389,7 +400,10 @@ class VerificationPage(BasePage):
         self._update_mode_label()
 
     def set_gallery_paths(self, paths: list[str]) -> None:
-        self.gallery_paths = list(paths)
+        new_paths = list(paths)
+        if tuple(new_paths) != tuple(self.gallery_paths):
+            self._clear_gallery_embedding_cache()
+        self.gallery_paths = new_paths
         self.results = []
         self.result_table.setRowCount(0)
         self._update_mode_label()
@@ -415,77 +429,53 @@ class VerificationPage(BasePage):
         query_image = self.query_image.copy()
         query_path = self.query_path
         gallery_paths = list(self.gallery_paths)
+        gallery_key = tuple(gallery_paths)
+        cached_gallery = (
+            list(self._gallery_embedding_cache)
+            if self._gallery_embedding_cache_key == gallery_key and self._gallery_embedding_cache is not None
+            else None
+        )
         threshold = self.threshold.value()
 
         def task(progress=None, is_cancelled=None):
-            if len(gallery_paths) == 1:
-                gallery_image = read_image(gallery_paths[0])
-                if gallery_image is None:
-                    raise ValueError(f"Image read failure: {gallery_paths[0]}")
-                compare = self.context.engine.compare_images(
-                    query_image,
-                    gallery_image,
-                    threshold=threshold,
-                    path1=query_path,
-                    path2=gallery_paths[0],
-                )
-                row = {
-                    "rank": 1,
-                    "path": gallery_paths[0],
-                    "similarity": compare.similarity,
-                    "threshold": compare.threshold,
-                    "decision": compare.decision,
-                    "det_score": compare.face_b.det_score,
-                    "bbox": compare.face_b.bbox,
-                    "query_bbox": compare.face_a.bbox,
-                    "notes": "; ".join(compare.notes),
-                }
-                return {"query_bbox": compare.face_a.bbox, "results": [row], "mode": "1:1 Compare"}
-
             query_face = self.context.engine.detect_best_face(query_image, source_path=query_path)
             if query_face is None or query_face.normed_embedding is None:
                 raise ValueError("No face detected in the query image or embedding unavailable.")
-            rows = []
-            for index, path in enumerate(gallery_paths):
-                if is_cancelled and is_cancelled():
-                    break
-                image = read_image(path)
-                if image is None:
-                    rows.append(self._error_row(path, "Image read failure.", threshold))
-                else:
-                    face = self.context.engine.detect_best_face(image, source_path=path)
-                    if face is None or face.normed_embedding is None:
-                        rows.append(self._error_row(path, "No face detected.", threshold))
-                    else:
-                        result = compare_embeddings(query_face.normed_embedding, face.normed_embedding, threshold)
-                        rows.append(
-                            {
-                                "rank": 0,
-                                "path": path,
-                                "similarity": float(result["similarity"]),
-                                "threshold": threshold,
-                                "decision": str(result["decision"]),
-                                "det_score": face.det_score,
-                                "bbox": face.bbox,
-                                "query_bbox": query_face.bbox,
-                                "notes": "",
-                            }
-                        )
+            if cached_gallery is not None:
+                gallery_cache = cached_gallery
                 if progress:
-                    progress(index + 1, len(gallery_paths), f"Processed {index + 1} of {len(gallery_paths)} gallery images")
+                    progress(1, 1, "Using cached gallery embeddings")
+            else:
+                gallery_cache = self._build_gallery_embedding_cache(gallery_paths, progress, is_cancelled)
+            rows = self._compare_query_to_gallery_cache(query_face.normed_embedding, gallery_cache, threshold)
             rows.sort(
                 key=lambda item: item["similarity"] if isinstance(item.get("similarity"), (int, float)) else -1.0,
                 reverse=True,
             )
             for rank, row in enumerate(rows, start=1):
                 row["rank"] = rank
-            return {"query_bbox": query_face.bbox, "results": rows, "mode": "1:N Gallery Search"}
+            mode = "1:1 Compare" if len(gallery_paths) == 1 else "1:N Gallery Search"
+            return {
+                "query_bbox": query_face.bbox,
+                "results": rows,
+                "mode": mode,
+                "query_path": query_path,
+                "gallery_key": gallery_key,
+                "gallery_cache": gallery_cache,
+            }
 
         def done(payload):
+            if self.query_path != payload["query_path"] or tuple(self.gallery_paths) != payload["gallery_key"]:
+                self.set_status("Recognition result ignored because query or gallery changed during processing.")
+                return
+            if cached_gallery is None:
+                self._gallery_embedding_cache_key = payload["gallery_key"]
+                self._gallery_embedding_cache = payload["gallery_cache"]
             self.results = payload["results"]
             self.query_input.set_faces([{"bbox": payload["query_bbox"], "label": "Query"}])
             self._populate_results()
-            self.set_status(f"{payload['mode']} complete. {len(self.results)} gallery result(s).")
+            cache_status = "cached gallery embeddings" if cached_gallery is None else "reused cached gallery embeddings"
+            self.set_status(f"{payload['mode']} complete with {cache_status}. {len(self.results)} gallery result(s).")
 
         self.run_task("Running verification", task, done)
 
@@ -523,6 +513,80 @@ class VerificationPage(BasePage):
 
     def _update_mode_label(self) -> None:
         pass
+
+    def _clear_gallery_embedding_cache(self) -> None:
+        self._gallery_embedding_cache_key = None
+        self._gallery_embedding_cache = None
+
+    def _build_gallery_embedding_cache(self, gallery_paths: list[str], progress=None, is_cancelled=None) -> list[dict]:
+        cache: list[dict] = []
+        for index, path in enumerate(gallery_paths):
+            if is_cancelled and is_cancelled():
+                break
+            image = read_image(path)
+            if image is None:
+                cache.append(self._gallery_error_cache_item(path, "Image read failure."))
+            else:
+                face = self.context.engine.detect_best_face(image, source_path=path)
+                if face is None or face.normed_embedding is None:
+                    cache.append(self._gallery_error_cache_item(path, "No face detected."))
+                else:
+                    cache.append(
+                        {
+                            "path": path,
+                            "embedding": np.asarray(face.normed_embedding, dtype=np.float32).copy(),
+                            "det_score": face.det_score,
+                            "bbox": face.bbox,
+                            "notes": "",
+                        }
+                    )
+            if progress:
+                progress(
+                    index + 1,
+                    len(gallery_paths),
+                    f"Computed gallery embeddings for {index + 1} of {len(gallery_paths)} images",
+                )
+        return cache
+
+    def _compare_query_to_gallery_cache(
+        self, query_embedding: np.ndarray, gallery_cache: list[dict], threshold: float
+    ) -> list[dict]:
+        rows = []
+        for item in gallery_cache:
+            embedding = item.get("embedding")
+            if embedding is None:
+                rows.append(
+                    self._error_row(
+                        str(item.get("path", "")),
+                        str(item.get("notes") or "No face detected."),
+                        threshold,
+                    )
+                )
+                continue
+            result = compare_embeddings(query_embedding, embedding, threshold)
+            rows.append(
+                {
+                    "rank": 0,
+                    "path": item.get("path", ""),
+                    "similarity": float(result["similarity"]),
+                    "threshold": threshold,
+                    "decision": str(result["decision"]),
+                    "det_score": item.get("det_score"),
+                    "bbox": item.get("bbox"),
+                    "notes": item.get("notes", ""),
+                }
+            )
+        return rows
+
+    @staticmethod
+    def _gallery_error_cache_item(path: str, message: str) -> dict:
+        return {
+            "path": path,
+            "embedding": None,
+            "det_score": None,
+            "bbox": None,
+            "notes": message,
+        }
 
     @staticmethod
     def _error_row(path: str, message: str, threshold: float) -> dict:
