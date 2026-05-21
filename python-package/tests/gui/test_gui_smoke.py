@@ -44,7 +44,7 @@ def test_main_window_smoke(tmp_path):
         assert "License Center" not in sidebar_titles
     settings_dialog = SettingsDialog(window.context, window)
     assert hasattr(settings_dialog, "theme")
-    assert settings_dialog.theme.count() >= 6
+    assert settings_dialog.theme.count() >= 7
     assert not hasattr(settings_dialog, "workspace")
     assert not hasattr(settings_dialog, "default_mode")
     dialogs = [settings_dialog, ModelManagerDialog(window.context, window), LicenseDialog(window.context, window)]

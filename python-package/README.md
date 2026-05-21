@@ -64,8 +64,8 @@ locally for the next launch.
 Global utilities are available from the top bar and **Tools** menu:
 **Settings**, **Models**, and **License**. **Settings** currently controls the
 UI theme. Available themes include System, Precision Light, Studio Dark,
-Graphite Pro, Azure Lab, and Emerald Focus. Workspace paths are chosen on first
-launch and are not changed from the settings dialog.
+Graphite Pro, Azure Lab, Emerald Focus, and Crimson Audit. Workspace paths are
+chosen on first launch and are not changed from the settings dialog.
 
 Models are not downloaded automatically by the GUI. Open **Models > Downloads**,
 click **Refresh Download URLs** to read the latest GitHub Releases
