@@ -208,7 +208,7 @@ Reports are written to:
 ```
 
 Markdown and HTML are always supported. PDF is generated when `reportlab` is
-available.
+available. Install `insightface[pdf]` to add PDF report export.
 
 ## Face Swap
 

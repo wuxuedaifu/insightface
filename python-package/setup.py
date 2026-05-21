@@ -66,8 +66,10 @@ requirements = [
 ]
 
 gui_requirements = [
-    'PySide6>=6.5',
-    'pandas',
+    'PySide6-Essentials>=6.5',
+]
+
+pdf_requirements = [
     'reportlab',
 ]
 
@@ -176,7 +178,7 @@ setup(
             "insightface-desktop=insightface.gui.__main__:main",
         ]
     },
-    extras_require={"gui": gui_requirements, "face3d": face3d_requirements},
+    extras_require={"gui": gui_requirements, "pdf": pdf_requirements, "face3d": face3d_requirements},
     install_requires=requirements,
     headers=headers,
     ext_modules=ext_modules,

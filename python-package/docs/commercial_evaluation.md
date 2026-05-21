@@ -90,7 +90,7 @@ Click **Export Report** after an evaluation. Reports include:
 13. Appendix: Raw Results
 
 Markdown and HTML are always supported. PDF is available when `reportlab` is
-installed.
+installed. Install `insightface[pdf]` to add PDF report export.
 
 ## Commercial License Notice
 

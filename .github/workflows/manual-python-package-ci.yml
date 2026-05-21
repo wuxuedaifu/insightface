@@ -119,6 +119,12 @@ jobs:
           assert "Tag: py3-none-any" in wheel_metadata
           assert "Requires-Dist: onnxruntime" in package_metadata
           assert "Requires-Dist: opencv-python" in package_metadata
+          assert "Provides-Extra: gui" in package_metadata
+          assert "Provides-Extra: pdf" in package_metadata
+          assert "Requires-Dist: PySide6-Essentials" in package_metadata
+          assert "Requires-Dist: reportlab" in package_metadata
+          assert "Requires-Dist: pandas" not in package_metadata
+          assert "Requires-Dist: PySide6 " not in package_metadata
           assert "insightface/data/images/t1.jpg" in names
           assert "insightface/data/objects/meanshape_68.pkl" in names
           assert not any(".data/data/insightface/data/" in name for name in names)

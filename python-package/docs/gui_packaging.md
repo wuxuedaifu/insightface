@@ -94,7 +94,8 @@ Output:
 
 ## Notes
 
-- PySide6 packaging can be large.
+- The GUI extra uses `PySide6-Essentials` only. This keeps Qt Widgets available
+  without installing the much larger `PySide6_Addons` wheel.
 - onnxruntime and onnxruntime-gpu may require additional dynamic library work.
 - CUDA builds are not recommended for default community installers.
 - A CPU provider build is the safest default.
