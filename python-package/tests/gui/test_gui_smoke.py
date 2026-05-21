@@ -1,6 +1,7 @@
 import pytest
 import os
 from pathlib import Path
+import numpy as np
 
 
 def test_main_window_smoke(tmp_path):
@@ -68,8 +69,13 @@ def test_main_window_smoke(tmp_path):
     assert album_page.cluster_table.horizontalHeaderItem(1).text() == "Photos"
     assert album_page.cluster_table.selectionBehavior() == QAbstractItemView.SelectRows
     assert album_page.photo_table.selectionBehavior() == QAbstractItemView.SelectRows
-    album_page.clusters = [{"id": 1, "photo_count": 2, "face_count": 3, "name": "Album Person 1"}]
-    album_page.cluster_items = {1: []}
+    from insightface.gui.core.utils import encode_webp_thumbnail
+
+    thumb = encode_webp_thumbnail(np.zeros((40, 80, 3), dtype=np.uint8), max_side=80, quality=70)
+    assert thumb is not None
+    assert album_page._icon_from_bytes(thumb, album_page.cluster_table.iconSize()) is not None
+    album_page.clusters = [{"id": 1, "photo_count": 2, "face_count": 3, "name": "Album Person 1", "thumbnail_face_id": 7}]
+    album_page.cluster_items = {1: [{"id": 7, "thumbnail": thumb, "media_path": str(tmp_path / "album.jpg")}]}
     album_page._populate_clusters()
     assert album_page.cluster_table.item(0, 0).textAlignment() == Qt.AlignCenter
     assert album_page.cluster_table.item(0, 1).textAlignment() == Qt.AlignCenter
