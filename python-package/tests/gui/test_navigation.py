@@ -1,3 +1,5 @@
+import os
+
 from insightface.gui.core.config import AppConfig, load_config, save_config
 from insightface.gui.core.navigation import AppMode, GLOBAL_PAGE_TITLES, NAVIGATION_MODES
 
@@ -61,14 +63,28 @@ def test_default_detection_size_is_auto(tmp_path):
 
 
 def test_threshold_slider_default_is_028():
-    import os
     import pytest
 
     os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
     pytest.importorskip("PySide6")
     from PySide6.QtWidgets import QApplication
+    from insightface.gui.app import configure_qt_plugin_paths
     from insightface.gui.widgets.threshold_slider import ThresholdSlider
 
+    configure_qt_plugin_paths()
     _app = QApplication.instance() or QApplication([])
     slider = ThresholdSlider()
     assert slider.value() == 0.28
+
+
+def test_qt_plugin_paths_are_configured(monkeypatch):
+    from pathlib import Path
+
+    from insightface.gui.app import configure_qt_plugin_paths
+
+    monkeypatch.delenv("QT_PLUGIN_PATH", raising=False)
+    monkeypatch.delenv("QT_QPA_PLATFORM_PLUGIN_PATH", raising=False)
+    configure_qt_plugin_paths()
+
+    assert Path(os.environ["QT_PLUGIN_PATH"]).exists()
+    assert Path(os.environ["QT_QPA_PLATFORM_PLUGIN_PATH"]).exists()

@@ -7,7 +7,7 @@ def test_main_window_smoke(tmp_path):
     PySide6 = pytest.importorskip("PySide6")
     from PySide6.QtWidgets import QApplication, QLabel, QPushButton
 
-    from insightface.gui.app import StudioContext
+    from insightface.gui.app import StudioContext, configure_qt_plugin_paths
     from insightface.gui.core.config import AppConfig
     from insightface.gui.core.face_engine import FaceEngine
     from insightface.gui.core.navigation import AppMode
@@ -17,6 +17,7 @@ def test_main_window_smoke(tmp_path):
     from insightface.gui.dialogs.settings_dialog import SettingsDialog
     from insightface.gui.main_window import MainWindow
 
+    configure_qt_plugin_paths()
     app = QApplication.instance() or QApplication([])
     cfg = AppConfig(workspace_path=str(tmp_path), auto_load_model=False, safe_mode=True)
     storage = Storage(cfg.database_path)

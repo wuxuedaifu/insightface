@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 import sys
 from dataclasses import dataclass
 from typing import Optional
@@ -22,6 +23,24 @@ class StudioContext:
     engine: FaceEngine
     log_file: str
     runtime_safe_mode: bool = False
+
+
+def configure_qt_plugin_paths() -> None:
+    """Point Qt at PySide6-Essentials plugins when the PySide6 meta package is absent."""
+
+    try:
+        import PySide6
+    except ImportError:
+        return
+    for package_dir in getattr(PySide6, "__path__", []):
+        plugins = Path(package_dir) / "Qt" / "plugins"
+        platforms = plugins / "platforms"
+        if platforms.exists():
+            if not os.environ.get("QT_PLUGIN_PATH"):
+                os.environ["QT_PLUGIN_PATH"] = str(plugins)
+            if not os.environ.get("QT_QPA_PLATFORM_PLUGIN_PATH"):
+                os.environ["QT_QPA_PLATFORM_PLUGIN_PATH"] = str(platforms)
+            return
 
 
 def create_context(args=None) -> StudioContext:
@@ -80,6 +99,7 @@ def create_context(args=None) -> StudioContext:
 
 
 def run_app(args=None) -> int:
+    configure_qt_plugin_paths()
     try:
         from PySide6.QtWidgets import QApplication
     except ImportError:
