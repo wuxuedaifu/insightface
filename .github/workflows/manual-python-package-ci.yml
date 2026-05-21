@@ -88,11 +88,17 @@ jobs:
                   continue
               raise AssertionError(f"{dist_name} should not be installed in the GUI extra, found {version}")
 
-          from insightface.gui.app import configure_qt_plugin_paths
+          from insightface.gui.app import configure_qt_plugin_paths, qt_plugin_root_candidates
 
           os.environ.pop("QT_PLUGIN_PATH", None)
           os.environ.pop("QT_QPA_PLATFORM_PLUGIN_PATH", None)
           configure_qt_plugin_paths()
+
+          if not os.environ.get("QT_PLUGIN_PATH") or not os.environ.get("QT_QPA_PLATFORM_PLUGIN_PATH"):
+              raise AssertionError(
+                  "Qt plugin paths were not configured. "
+                  f"Candidates: {[str(path) for path in qt_plugin_root_candidates()]}"
+              )
 
           plugin_root = Path(os.environ["QT_PLUGIN_PATH"])
           platform_dir = Path(os.environ["QT_QPA_PLATFORM_PLUGIN_PATH"])

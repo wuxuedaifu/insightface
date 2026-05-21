@@ -5,7 +5,7 @@ from __future__ import annotations
 import os
 import sys
 from dataclasses import dataclass
-from typing import Optional
+from typing import Iterable, Optional
 
 from pathlib import Path
 
@@ -25,15 +25,58 @@ class StudioContext:
     runtime_safe_mode: bool = False
 
 
-def configure_qt_plugin_paths() -> None:
-    """Point Qt at PySide6-Essentials plugins when the PySide6 meta package is absent."""
+def _unique_existing_paths(paths: Iterable[Path]) -> list[Path]:
+    seen = set()
+    unique_paths = []
+    for path in paths:
+        resolved = str(path)
+        if resolved in seen:
+            continue
+        seen.add(resolved)
+        if path.exists():
+            unique_paths.append(path)
+    return unique_paths
+
+
+def qt_plugin_root_candidates() -> list[Path]:
+    """Return plausible Qt plugin roots for PySide6 wheel and conda layouts."""
 
     try:
         import PySide6
     except ImportError:
-        return
-    for package_dir in getattr(PySide6, "__path__", []):
-        plugins = Path(package_dir) / "Qt" / "plugins"
+        return []
+
+    candidates = []
+    for package_dir_raw in getattr(PySide6, "__path__", []):
+        package_dir = Path(package_dir_raw)
+        candidates.extend(
+            [
+                package_dir / "Qt" / "plugins",
+                package_dir / "plugins",
+            ]
+        )
+
+    try:
+        from PySide6.QtCore import QLibraryInfo
+
+        candidates.append(Path(QLibraryInfo.path(QLibraryInfo.LibraryPath.PluginsPath)))
+    except Exception:
+        pass
+
+    candidates.extend(
+        [
+            Path(sys.prefix) / "plugins",
+            Path(sys.prefix) / "Library" / "plugins",
+            Path(sys.prefix) / "lib" / "qt6" / "plugins",
+        ]
+    )
+    return _unique_existing_paths(candidates)
+
+
+def configure_qt_plugin_paths() -> None:
+    """Point Qt at PySide6-Essentials plugins when the PySide6 meta package is absent."""
+
+    for plugins in qt_plugin_root_candidates():
         platforms = plugins / "platforms"
         if platforms.exists():
             if not os.environ.get("QT_PLUGIN_PATH"):

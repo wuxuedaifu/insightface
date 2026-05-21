@@ -17,12 +17,20 @@ def _platform_plugin_names():
 
 def test_qt_platform_plugins_available_for_current_platform(monkeypatch):
     pytest.importorskip("PySide6")
-    from insightface.gui.app import configure_qt_plugin_paths
+    from insightface.gui.app import configure_qt_plugin_paths, qt_plugin_root_candidates
 
     monkeypatch.delenv("QT_PLUGIN_PATH", raising=False)
     monkeypatch.delenv("QT_QPA_PLATFORM_PLUGIN_PATH", raising=False)
     configure_qt_plugin_paths()
 
+    assert os.environ.get("QT_PLUGIN_PATH"), (
+        "QT_PLUGIN_PATH was not configured. "
+        f"Qt plugin root candidates: {qt_plugin_root_candidates()}"
+    )
+    assert os.environ.get("QT_QPA_PLATFORM_PLUGIN_PATH"), (
+        "QT_QPA_PLATFORM_PLUGIN_PATH was not configured. "
+        f"Qt plugin root candidates: {qt_plugin_root_candidates()}"
+    )
     platform_dir = Path(os.environ["QT_QPA_PLATFORM_PLUGIN_PATH"])
     expected_plugins = _platform_plugin_names()
     if not expected_plugins:
