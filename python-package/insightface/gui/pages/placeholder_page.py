@@ -21,7 +21,8 @@ class PlaceholderPage(BasePage):
         super().__init__(context, title, description, parent)
         status = QLabel(coming_soon_text)
         status.setWordWrap(True)
-        status.setStyleSheet("font-size: 16px; font-weight: 600; color:#4b5563; padding:12px 0;")
+        status.setProperty("role", "muted")
+        status.setStyleSheet("font-size: 16px; font-weight: 600; padding:12px 0;")
         self.content.addWidget(status)
         if ctas:
             buttons = []

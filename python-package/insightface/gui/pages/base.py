@@ -34,18 +34,19 @@ class BasePage(QWidget):
         if description:
             desc = QLabel(description)
             desc.setWordWrap(True)
+            desc.setProperty("role", "muted")
             self.root_layout.addWidget(desc)
         self.status_label = QLabel("")
         self.status_label.setWordWrap(True)
-        self.status_label.setStyleSheet("color: #374151;")
+        self.status_label.setProperty("role", "status")
         self.content = QVBoxLayout()
         self.root_layout.addLayout(self.content, 1)
         self.root_layout.addWidget(self.status_label)
 
     def notice(self, text: str = LOCAL_PROCESSING_NOTICE) -> QLabel:
         label = QLabel(text)
+        label.setObjectName("noticeLabel")
         label.setWordWrap(True)
-        label.setStyleSheet("background:#eef2ff; border:1px solid #c7d2fe; padding:8px;")
         return label
 
     def card(self) -> tuple[QFrame, QVBoxLayout]:

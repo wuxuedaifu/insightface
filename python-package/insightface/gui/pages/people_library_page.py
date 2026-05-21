@@ -41,20 +41,14 @@ class ImageOrFolderImportBox(QFrame):
         self.setProperty("hoverActive", False)
         self.setProperty("dragActive", False)
         self.setProperty("hasFiles", False)
-        self.setStyleSheet(
-            "QFrame#imageOrFolderImport{border:1px dashed #9ca3af; border-radius:6px; background:#f9fafb; padding:10px;}"
-            "QFrame#imageOrFolderImport[hoverActive='true']{border-color:#3b82f6; background:#f0f9ff;}"
-            "QFrame#imageOrFolderImport[dragActive='true']{border-color:#16a34a; background:#ecfdf5;}"
-            "QFrame#imageOrFolderImport QLabel{background:transparent;}"
-        )
         layout = QVBoxLayout(self)
         title = QLabel("Import Image or Folder")
         title.setAlignment(Qt.AlignCenter)
         title.setStyleSheet("font-size:15px; font-weight:700;")
         hint = QLabel("Click to import an image or folder, or drag one here. Folders are imported recursively.")
+        hint.setObjectName("dropPrompt")
         hint.setAlignment(Qt.AlignCenter)
         hint.setWordWrap(True)
-        hint.setStyleSheet("color:#4b5563;")
         self.button = QPushButton("Import Image or Folder")
         self.button.clicked.connect(self._show_menu)
         layout.addWidget(title)

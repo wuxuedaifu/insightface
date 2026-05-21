@@ -60,7 +60,7 @@ class FaceSwapPage(BasePage):
         self.output_view.installEventFilter(self)
         self.result_label = QLabel("Result preview appears here. Video results are saved to the exports folder.")
         self.result_label.setWordWrap(True)
-        self.result_label.setStyleSheet("color:#4b5563;")
+        self.result_label.setProperty("role", "muted")
         self.source_view.pathChanged.connect(lambda path: self.load_source(path) if path else self.clear_source())
         self.target_view.pathChanged.connect(lambda path: self.load_target(path) if path else self.clear_target())
 

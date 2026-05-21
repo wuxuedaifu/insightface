@@ -62,9 +62,10 @@ images, DBSCAN clustering with a default threshold of `0.28`, and reviewing
 original photo thumbnails. Album directories and clustering results are saved
 locally for the next launch.
 Global utilities are available from the top bar and **Tools** menu:
-**Settings**, **Models**, and **License**. **Settings** currently only controls
-the UI theme; workspace paths are chosen on first launch and are not changed
-from the settings dialog.
+**Settings**, **Models**, and **License**. **Settings** currently controls the
+UI theme. Available themes include System, Precision Light, Studio Dark,
+Graphite Pro, Azure Lab, and Emerald Focus. Workspace paths are chosen on first
+launch and are not changed from the settings dialog.
 
 Models are not downloaded automatically by the GUI. Open **Models > Downloads**,
 click **Refresh Download URLs** to read the latest GitHub Releases

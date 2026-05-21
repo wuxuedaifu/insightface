@@ -6,6 +6,7 @@ from PySide6.QtCore import Signal
 from PySide6.QtWidgets import QComboBox, QDialog, QDialogButtonBox, QFormLayout, QLabel, QVBoxLayout
 
 from ..core.config import save_config
+from ..core.theme import THEME_OPTIONS, normalize_theme, theme_description
 
 
 class SettingsDialog(QDialog):
@@ -15,7 +16,7 @@ class SettingsDialog(QDialog):
         super().__init__(parent)
         self.context = context
         self.setWindowTitle("Settings")
-        self.resize(460, 180)
+        self.resize(560, 220)
 
         layout = QVBoxLayout(self)
         title = QLabel("Application Settings")
@@ -29,10 +30,19 @@ class SettingsDialog(QDialog):
         form = QFormLayout()
         form.setFieldGrowthPolicy(QFormLayout.AllNonFixedFieldsGrow)
         self.theme = QComboBox()
-        self.theme.addItems(["system", "light", "dark"])
-        self.theme.setCurrentText(self.context.config.ui_theme)
+        for option in THEME_OPTIONS:
+            self.theme.addItem(option.label, option.value)
+        current = normalize_theme(self.context.config.ui_theme)
+        current_index = self.theme.findData(current)
+        self.theme.setCurrentIndex(max(0, current_index))
+        self.theme.currentIndexChanged.connect(self._update_theme_description)
         form.addRow("UI theme", self.theme)
         layout.addLayout(form, 1)
+        self.theme_help = QLabel("")
+        self.theme_help.setWordWrap(True)
+        self.theme_help.setProperty("role", "muted")
+        layout.addWidget(self.theme_help)
+        self._update_theme_description()
 
         buttons = QDialogButtonBox(QDialogButtonBox.Save | QDialogButtonBox.Apply | QDialogButtonBox.Cancel)
         buttons.button(QDialogButtonBox.Save).clicked.connect(self.save_and_close)
@@ -41,10 +51,13 @@ class SettingsDialog(QDialog):
         layout.addWidget(buttons)
 
     def apply(self) -> None:
-        self.context.config.ui_theme = self.theme.currentText()
+        self.context.config.ui_theme = self.theme.currentData()
         save_config(self.context.config)
         self.settingsSaved.emit()
 
     def save_and_close(self) -> None:
         self.apply()
         self.accept()
+
+    def _update_theme_description(self) -> None:
+        self.theme_help.setText(theme_description(self.theme.currentData()))

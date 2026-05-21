@@ -75,8 +75,10 @@ sidebar:
 
 Global utilities are always available from the top app bar:
 
-- **Settings** opens the application settings dialog for the UI theme. Workspace
-  paths are chosen on first launch and are not changed from this dialog.
+- **Settings** opens the application settings dialog for the UI theme. The
+  included themes are System, Precision Light, Studio Dark, Graphite Pro, Azure
+  Lab, and Emerald Focus. Workspace paths are chosen on first launch and are not
+  changed from this dialog.
 - **Models** opens runtime settings, model downloads, and custom model directory
   tools.
 - **License** opens the License Center dialog.

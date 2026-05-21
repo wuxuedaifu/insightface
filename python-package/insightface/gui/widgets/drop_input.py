@@ -44,19 +44,12 @@ class DropInput(QFrame):
         self.setProperty("dragActive", False)
         self.setProperty("hasFiles", False)
         self.setFrameShape(QFrame.StyledPanel)
-        self.setStyleSheet(
-            "QFrame#dropInput{border:1px dashed #9ca3af; border-radius:6px; background:#f9fafb; padding:8px;}"
-            "QFrame#dropInput[hoverActive='true']{border-color:#3b82f6; background:#f0f9ff;}"
-            "QFrame#dropInput[hasFiles='true']{border:1px solid #d1d5db; background:#ffffff;}"
-            "QFrame#dropInput[hasFiles='true'][hoverActive='true']{border-color:#3b82f6; background:#f8fbff;}"
-            "QFrame#dropInput[dragActive='true']{border-color:#16a34a; background:#ecfdf5;}"
-            "QFrame#dropInput QLabel{background:transparent;}"
-        )
         layout = QVBoxLayout(self)
         self.title_label = QLabel(title)
         self.title_label.setAlignment(Qt.AlignCenter)
         self.title_label.setStyleSheet("font-weight: 600;")
         self.path_label = QLabel(self._empty_text())
+        self.path_label.setObjectName("dropPrompt")
         self.path_label.setAlignment(Qt.AlignCenter)
         self.path_label.setWordWrap(True)
         self.path_label.setTextInteractionFlags(Qt.TextSelectableByMouse)

@@ -36,16 +36,12 @@ class AlbumDirectoryList(QListWidget):
 
     def __init__(self, parent=None):
         super().__init__(parent)
+        self.setObjectName("albumDirectoryList")
         self.setAcceptDrops(True)
         self.setMouseTracking(True)
         self.setSelectionMode(QListWidget.ExtendedSelection)
         self.setProperty("hoverActive", False)
         self.setProperty("dragActive", False)
-        self.setStyleSheet(
-            "QListWidget{border:1px dashed #9ca3af; border-radius:6px; background:#f9fafb;}"
-            "QListWidget[hoverActive='true']{border-color:#3b82f6; background:#f0f9ff;}"
-            "QListWidget[dragActive='true']{border-color:#16a34a; background:#ecfdf5;}"
-        )
         self.installEventFilter(self)
         self.viewport().installEventFilter(self)
 

@@ -51,15 +51,6 @@ class GalleryUploadPanel(QFrame):
         self.setProperty("hoverActive", False)
         self.setProperty("dragActive", False)
         self.setProperty("hasFiles", False)
-        self.setStyleSheet(
-            "QFrame#galleryUpload{border:1px dashed #9ca3af; border-radius:6px; background:#f9fafb;}"
-            "QFrame#galleryUpload[hoverActive='true']{border-color:#3b82f6; background:#f0f9ff;}"
-            "QFrame#galleryUpload[hasFiles='true']{border:1px solid #d1d5db; background:#ffffff;}"
-            "QFrame#galleryUpload[hasFiles='true'][hoverActive='true']{border-color:#3b82f6; background:#f8fbff;}"
-            "QFrame#galleryUpload[dragActive='true']{border-color:#16a34a; background:#ecfdf5;}"
-            "QFrame#galleryUpload QLabel{background:transparent;}"
-            "QListWidget{border:0; background:transparent;}"
-        )
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(10, 10, 10, 10)
@@ -67,7 +58,7 @@ class GalleryUploadPanel(QFrame):
         title = QLabel("Gallery")
         title.setStyleSheet("font-size:15px; font-weight:700;")
         self.count_label = QLabel("No images")
-        self.count_label.setStyleSheet("color:#6b7280;")
+        self.count_label.setProperty("role", "muted")
         self.remove_button = QPushButton("Remove Selected")
         self.remove_button.clicked.connect(self.remove_selected)
         self.clear_button = QPushButton("Clear")
@@ -82,9 +73,9 @@ class GalleryUploadPanel(QFrame):
         layout.addLayout(header)
 
         self.prompt = QLabel("Click to upload images or a folder, or drag them here")
+        self.prompt.setObjectName("uploadPrompt")
         self.prompt.setAlignment(Qt.AlignCenter)
         self.prompt.setWordWrap(True)
-        self.prompt.setStyleSheet("color:#4b5563; font-size:15px; font-weight:600; padding:18px;")
         self.prompt.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
         layout.addWidget(self.prompt, 1)
 
@@ -94,9 +85,9 @@ class GalleryUploadPanel(QFrame):
         self.single_preview.setStyleSheet("border:0; background:transparent;")
         self.single_preview.hide()
         self.single_hint = QLabel("")
+        self.single_hint.setObjectName("pathLabel")
         self.single_hint.setAlignment(Qt.AlignCenter)
         self.single_hint.setWordWrap(True)
-        self.single_hint.setStyleSheet("color:#4b5563; font-weight:600; padding:6px; background:transparent;")
         self.single_hint.hide()
         layout.addWidget(self.single_preview, 1)
         layout.addWidget(self.single_hint)

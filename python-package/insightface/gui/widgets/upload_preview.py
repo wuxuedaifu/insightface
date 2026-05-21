@@ -48,17 +48,6 @@ class UploadPreview(QFrame):
         self.setProperty("hoverActive", False)
         self.setProperty("dragActive", False)
         self.setProperty("hasFile", False)
-        self.setStyleSheet(
-            "QFrame#uploadPreview{border:1px dashed #9ca3af; border-radius:6px; background:#f9fafb;}"
-            "QFrame#uploadPreview[hoverActive='true']{border-color:#3b82f6; background:#f0f9ff;}"
-            "QFrame#uploadPreview[hasFile='true']{border:1px solid #d1d5db; background:#ffffff;}"
-            "QFrame#uploadPreview[hasFile='true'][hoverActive='true']{border-color:#3b82f6; background:#f8fbff;}"
-            "QFrame#uploadPreview[dragActive='true']{border-color:#16a34a; background:#ecfdf5;}"
-            "QFrame#uploadPreview QLabel{background:transparent;}"
-            "QFrame#uploadPreview QGraphicsView{background:transparent; border:0;}"
-            "QPushButton#removeUpload{background:rgba(17,24,39,0.78); color:white; border:0; border-radius:11px; font-weight:700;}"
-            "QPushButton#removeUpload:hover{background:#dc2626;}"
-        )
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
@@ -73,17 +62,17 @@ class UploadPreview(QFrame):
         self.viewer.viewport().setMouseTracking(True)
         self.viewer.viewport().setStyleSheet("background:transparent;")
         self.placeholder = QLabel(self._placeholder_text())
+        self.placeholder.setObjectName("uploadPrompt")
         self.placeholder.setAlignment(Qt.AlignCenter)
         self.placeholder.setWordWrap(True)
-        self.placeholder.setStyleSheet("color:#4b5563; font-size:15px; font-weight:600; padding:18px;")
         self.stack.addWidget(self.viewer)
         self.stack.addWidget(self.placeholder)
         layout.addLayout(self.stack, 1)
 
         self.file_label = QLabel("")
+        self.file_label.setObjectName("pathLabel")
         self.file_label.setTextInteractionFlags(Qt.TextSelectableByMouse)
         self.file_label.setAlignment(Qt.AlignCenter)
-        self.file_label.setStyleSheet("color:#374151; padding:0 8px 8px 8px;")
         self.file_label.hide()
         layout.addWidget(self.file_label)
 

@@ -11,6 +11,7 @@ from PySide6.QtWidgets import QCheckBox, QComboBox, QDoubleSpinBox, QFormLayout,
 
 from ..core.config import AppConfig, save_config
 from ..core.paths import ensure_workspace
+from ..core.theme import THEME_OPTIONS, normalize_theme
 from .base import BasePage
 
 
@@ -45,8 +46,9 @@ class SettingsPage(BasePage):
         self.anonymize = QCheckBox("Anonymize report paths")
         self.anonymize.setChecked(cfg.anonymize_report_paths)
         self.theme = QComboBox()
-        self.theme.addItems(["system", "light", "dark"])
-        self.theme.setCurrentText(cfg.ui_theme)
+        for option in THEME_OPTIONS:
+            self.theme.addItem(option.label, option.value)
+        self.theme.setCurrentIndex(max(0, self.theme.findData(normalize_theme(cfg.ui_theme))))
         form = QFormLayout()
         for label, widget in [
             ("Workspace path", self.workspace),
@@ -82,7 +84,7 @@ class SettingsPage(BasePage):
         cfg.save_crops = self.save_crops.isChecked()
         cfg.save_recognition_logs = self.save_logs.isChecked()
         cfg.anonymize_report_paths = self.anonymize.isChecked()
-        cfg.ui_theme = self.theme.currentText()
+        cfg.ui_theme = self.theme.currentData()
         save_config(cfg)
         self.set_status("Settings saved.")
 
