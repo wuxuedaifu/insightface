@@ -1,4 +1,4 @@
-from insightface.gui.core.model_downloads import GFPGAN_DOWNLOAD_URL, fallback_model_assets, local_model_status
+from insightface.gui.core.model_downloads import GFPGAN_DOWNLOAD_URL, _content_range_total, fallback_model_assets, local_model_status
 from insightface.gui.core.paths import default_workspace, workspace_paths
 
 
@@ -26,9 +26,17 @@ def test_fallback_model_assets_have_github_release_urls(tmp_path):
             assert asset.source == "third party"
             assert asset.kind == "third-party restore model"
             assert asset.browser_download_url == GFPGAN_DOWNLOAD_URL
+            assert "harisreedhar/Face-Upscalers-ONNX/releases/download/Models" in asset.browser_download_url
         else:
             assert asset.tag_name == "v0.7"
             assert asset.browser_download_url.startswith(
                 "https://github.com/deepinsight/insightface/releases/download/v0.7/"
             )
     assert local_model_status(assets[0], tmp_path) == "not installed"
+
+
+def test_content_range_total_parser():
+    assert _content_range_total("bytes 10-19/100") == 100
+    assert _content_range_total("bytes 10-19/*") == 0
+    assert _content_range_total(None) == 0
+    assert _content_range_total("not-a-range") == 0

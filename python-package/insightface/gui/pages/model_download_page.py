@@ -6,7 +6,7 @@ from pathlib import Path
 
 from PySide6.QtCore import QUrl
 from PySide6.QtGui import QDesktopServices
-from PySide6.QtWidgets import QLabel, QTableWidget, QTableWidgetItem
+from PySide6.QtWidgets import QAbstractItemView, QLabel, QTableWidget, QTableWidgetItem
 
 from ..core.config import save_config
 from ..core.constants import LICENSE_NOTICE
@@ -48,6 +48,9 @@ class ModelDownloadPage(BasePage):
             )
         )
         self.table = QTableWidget(0, 8)
+        self.table.setSelectionBehavior(QAbstractItemView.SelectRows)
+        self.table.setSelectionMode(QAbstractItemView.SingleSelection)
+        self.table.setEditTriggers(QAbstractItemView.NoEditTriggers)
         self.table.setHorizontalHeaderLabels(
             ["asset", "source", "kind", "release", "size", "updated_at", "local status", "download url"]
         )

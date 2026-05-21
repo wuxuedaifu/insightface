@@ -9,6 +9,7 @@ from __future__ import annotations
 import json
 import os
 import shutil
+import time
 import urllib.error
 import urllib.request
 import zipfile
@@ -24,8 +25,8 @@ FALLBACK_RELEASE_TAG = "v0.7"
 FALLBACK_RELEASE_NAME = "insightface v0.7 model packages"
 GFPGAN_MODEL_NAME = "GFPGANv1.4.onnx"
 GFPGAN_DOWNLOAD_URL = (
-    "https://huggingface.co/datasets/Gourieff/ReActor/resolve/main/"
-    "models/facerestore_models/GFPGANv1.4.onnx?download=true"
+    "https://github.com/harisreedhar/Face-Upscalers-ONNX/releases/download/"
+    "Models/GFPGANv1.4.onnx"
 )
 
 
@@ -90,7 +91,7 @@ def third_party_model_assets() -> List[ModelAsset]:
             name=GFPGAN_MODEL_NAME,
             browser_download_url=GFPGAN_DOWNLOAD_URL,
             tag_name="third-party",
-            release_name="Gourieff/ReActor GFPGAN face restore",
+            release_name="harisreedhar/Face-Upscalers-ONNX GFPGAN v1.4",
             size=340 * 1024 * 1024,
             content_type="application/octet-stream",
             source="third party",
@@ -238,6 +239,83 @@ def list_installed_gfpgan_models(model_root: str | os.PathLike[str]) -> list[Pat
     return sorted(path for path in root.rglob("*.onnx") if "gfpgan" in path.name.lower())
 
 
+def _content_range_total(value: str | None) -> int:
+    if not value or "/" not in value:
+        return 0
+    total = value.rsplit("/", 1)[-1].strip()
+    if not total or total == "*":
+        return 0
+    try:
+        return int(total)
+    except ValueError:
+        return 0
+
+
+def _download_with_retries(
+    url: str,
+    destination: Path,
+    asset_name: str,
+    expected_size: int = 0,
+    progress: Optional[Callable[[int, int, str], None]] = None,
+    retries: int = 4,
+) -> None:
+    partial = destination.with_suffix(destination.suffix + ".part")
+    last_error: Exception | None = None
+    for attempt in range(1, retries + 1):
+        existing = partial.stat().st_size if partial.exists() else 0
+        headers = {
+            "Accept": "application/octet-stream,*/*",
+            "User-Agent": "Mozilla/5.0 InsightFace-Evaluation-Studio/1.0",
+        }
+        if existing:
+            headers["Range"] = f"bytes={existing}-"
+        request = urllib.request.Request(url, headers=headers)
+        try:
+            with urllib.request.urlopen(request, timeout=120) as response:
+                status = getattr(response, "status", response.getcode())
+                content_length = int(response.headers.get("Content-Length") or 0)
+                content_range_total = _content_range_total(response.headers.get("Content-Range"))
+                if existing and status != 206:
+                    existing = 0
+                    mode = "wb"
+                elif existing:
+                    mode = "ab"
+                else:
+                    mode = "wb"
+                if content_range_total:
+                    total = content_range_total
+                elif status == 206:
+                    total = existing + content_length
+                else:
+                    total = content_length or expected_size
+                downloaded = existing if mode == "ab" else 0
+                with partial.open(mode) as handle:
+                    while True:
+                        chunk = response.read(1024 * 1024)
+                        if not chunk:
+                            break
+                        handle.write(chunk)
+                        downloaded += len(chunk)
+                        if progress:
+                            progress(downloaded, total or downloaded, f"Downloading {asset_name}")
+            partial.replace(destination)
+            return
+        except (urllib.error.URLError, TimeoutError, ConnectionResetError, OSError) as exc:
+            if isinstance(exc, urllib.error.HTTPError) and exc.code == 416 and partial.exists():
+                partial.replace(destination)
+                return
+            last_error = exc
+            if progress:
+                progress(
+                    existing,
+                    expected_size or existing or 1,
+                    f"Download interrupted; retrying {asset_name} ({attempt}/{retries})",
+                )
+            if attempt < retries:
+                time.sleep(min(2 * attempt, 8))
+    raise RuntimeError(f"Download failed for {asset_name} after {retries} attempt(s): {last_error}")
+
+
 def download_model_asset(
     asset: ModelAsset,
     model_root: str | os.PathLike[str],
@@ -250,22 +328,13 @@ def download_model_asset(
     model_root_path.mkdir(parents=True, exist_ok=True)
 
     archive_path = cache_dir / asset.name
-    request = urllib.request.Request(
+    _download_with_retries(
         asset.browser_download_url,
-        headers={"User-Agent": "InsightFace-Evaluation-Studio/1.0"},
+        archive_path,
+        asset.name,
+        expected_size=asset.size,
+        progress=progress,
     )
-    with urllib.request.urlopen(request, timeout=120) as response:
-        total = int(response.headers.get("Content-Length") or asset.size or 0)
-        downloaded = 0
-        with archive_path.open("wb") as handle:
-            while True:
-                chunk = response.read(1024 * 1024)
-                if not chunk:
-                    break
-                handle.write(chunk)
-                downloaded += len(chunk)
-                if progress:
-                    progress(downloaded, total or downloaded, f"Downloading {asset.name}")
 
     if asset.name.endswith(".zip"):
         target_dir = model_root_path / asset.stem

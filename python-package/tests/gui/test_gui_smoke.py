@@ -5,7 +5,7 @@ import os
 def test_main_window_smoke(tmp_path):
     os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
     PySide6 = pytest.importorskip("PySide6")
-    from PySide6.QtWidgets import QApplication, QLabel, QPushButton
+    from PySide6.QtWidgets import QAbstractItemView, QApplication, QLabel, QPushButton
 
     from insightface.gui.app import StudioContext, configure_qt_plugin_paths
     from insightface.gui.core.config import AppConfig
@@ -55,6 +55,8 @@ def test_main_window_smoke(tmp_path):
     assert not hasattr(settings_dialog, "workspace")
     assert not hasattr(settings_dialog, "default_mode")
     model_dialog = ModelManagerDialog(window.context, window)
+    assert model_dialog.downloads_page.table.selectionBehavior() == QAbstractItemView.SelectRows
+    assert model_dialog.downloads_page.table.selectionMode() == QAbstractItemView.SingleSelection
     assert not hasattr(model_dialog.runtime_page, "threshold")
     assert not hasattr(model_dialog.runtime_page, "workers")
     assert not hasattr(model_dialog.runtime_page, "frame_interval")
