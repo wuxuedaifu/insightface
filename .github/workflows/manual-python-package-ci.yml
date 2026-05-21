@@ -71,6 +71,50 @@ jobs:
         run: |
           python -m pip install -e ".[gui]"
 
+      - name: Check PySide6 Essentials platform plugins
+        run: |
+          python - <<'PY'
+          import os
+          import sys
+          from importlib import metadata
+          from pathlib import Path
+
+          assert metadata.version("PySide6-Essentials")
+          assert metadata.version("shiboken6")
+          for dist_name in ("PySide6", "PySide6-Addons"):
+              try:
+                  version = metadata.version(dist_name)
+              except metadata.PackageNotFoundError:
+                  continue
+              raise AssertionError(f"{dist_name} should not be installed in the GUI extra, found {version}")
+
+          from insightface.gui.app import configure_qt_plugin_paths
+
+          os.environ.pop("QT_PLUGIN_PATH", None)
+          os.environ.pop("QT_QPA_PLATFORM_PLUGIN_PATH", None)
+          configure_qt_plugin_paths()
+
+          plugin_root = Path(os.environ["QT_PLUGIN_PATH"])
+          platform_dir = Path(os.environ["QT_QPA_PLATFORM_PLUGIN_PATH"])
+          if sys.platform == "darwin":
+              expected = {"libqcocoa.dylib", "libqoffscreen.dylib"}
+          elif sys.platform.startswith("win"):
+              expected = {"qwindows.dll", "qoffscreen.dll"}
+          elif sys.platform.startswith("linux"):
+              expected = {"libqxcb.so", "libqoffscreen.so"}
+          else:
+              expected = set()
+
+          available = {path.name for path in platform_dir.iterdir()}
+          missing = expected - available
+          assert plugin_root.exists(), plugin_root
+          assert platform_dir.exists(), platform_dir
+          assert not missing, f"Missing Qt platform plugins: {sorted(missing)} in {platform_dir}"
+
+          print(f"PySide6 Essentials Qt plugin root: {plugin_root}")
+          print(f"Available platform plugins: {sorted(available)}")
+          PY
+
       - name: Check installed dependencies
         run: |
           python -m pip check
