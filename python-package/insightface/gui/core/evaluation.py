@@ -10,7 +10,7 @@ from typing import Any, Dict, List, Optional
 
 import numpy as np
 
-from .constants import DEFAULT_LICENSE_STATUS, IMAGE_EXTENSIONS
+from .constants import DEFAULT_LICENSE_STATUS, DEFAULT_THRESHOLD, IMAGE_EXTENSIONS
 from .face_engine import FaceEngine
 from .models import EvaluationResult
 from .recognition import cosine_similarity
@@ -77,7 +77,7 @@ def tar_at_far(rows: List[Dict[str, Any]], target_far: float) -> Any:
 def run_kyc_pairs_evaluation(
     pairs_csv: str | Path,
     engine: FaceEngine,
-    threshold: float = 0.5,
+    threshold: float = DEFAULT_THRESHOLD,
     license_status: str = DEFAULT_LICENSE_STATUS,
     progress_callback=None,
     cancel_callback=None,
@@ -165,7 +165,7 @@ def run_identification_evaluation(
     gallery_folder: str | Path,
     probe_folder: str | Path,
     engine: FaceEngine,
-    threshold: float = 0.5,
+    threshold: float = DEFAULT_THRESHOLD,
     ground_truth_csv: Optional[str | Path] = None,
     license_status: str = DEFAULT_LICENSE_STATUS,
     progress_callback=None,

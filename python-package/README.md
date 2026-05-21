@@ -58,7 +58,9 @@ app bar. Face Recognition is a single **Query & Gallery** workspace: upload
 one query image and one gallery image for 1:1 compare, or upload multiple
 gallery images / a folder for 1:N gallery search. Album Management uses a
 single **Album** workspace for adding one or more folders, refreshing new
-images, DBSCAN clustering, and reviewing original photo thumbnails.
+images, DBSCAN clustering with a default threshold of `0.28`, and reviewing
+original photo thumbnails. Album directories and clustering results are saved
+locally for the next launch.
 Global utilities are available from the top bar and **Tools** menu:
 **Settings**, **Models**, and **License**. **Settings** currently only controls
 the UI theme; workspace paths are chosen on first launch and are not changed

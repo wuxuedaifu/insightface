@@ -169,17 +169,25 @@ CSV and JSON.
 Open **Album Management > Album** to add one or more album directories. Click
 **Import / Refresh** to scan new image files, detect faces, save local crops,
 and cluster all indexed faces from the selected directories. The page uses
-DBSCAN with a default cosine-distance threshold of `0.3`. If scikit-learn is
+DBSCAN with a default cosine-distance threshold of `0.28`. If scikit-learn is
 not available, it falls back to a simple centroid grouping strategy and shows
 the algorithm used.
 
 Album cluster IDs avoid duplicating existing People Library IDs. When a cluster
 matches an existing person within the configured duplicate distance threshold
-(`0.3` by default), the existing person ID is reused; otherwise the page assigns
+(`0.28` by default), the existing person ID is reused; otherwise the page assigns
 the next available album person ID. The cluster thumbnail is chosen from the
 face nearest the cluster centroid. Selecting a cluster shows all original photo
 thumbnails for that cluster, and double-clicking a thumbnail opens the original
 image.
+
+Album directories and clustering results are saved in the local SQLite
+database so the page can restore them on the next launch. **Clear** only clears
+the selected album directories and leaves the current clustering results
+visible. **Rebuild All** asks for confirmation, then reprocesses all selected
+album directories from scratch and replaces the saved clustering results. If no
+album directories are selected, **Rebuild All** clears the saved clustering
+results.
 
 ## Enterprise Evaluation
 

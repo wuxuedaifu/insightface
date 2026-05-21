@@ -7,6 +7,7 @@ from typing import Any, Dict, Iterable, List, Optional
 
 import numpy as np
 
+from .constants import DEFAULT_THRESHOLD
 from .models import SearchResult
 
 
@@ -28,7 +29,7 @@ def cosine_similarity(a: np.ndarray | Iterable[float] | None, b: np.ndarray | It
     return float(np.dot(na, nb))
 
 
-def compare_embeddings(a: np.ndarray, b: np.ndarray, threshold: float = 0.5) -> Dict[str, Any]:
+def compare_embeddings(a: np.ndarray, b: np.ndarray, threshold: float = DEFAULT_THRESHOLD) -> Dict[str, Any]:
     similarity = cosine_similarity(a, b)
     if similarity >= threshold:
         decision = "Same Person"
@@ -43,7 +44,7 @@ def search_gallery(
     query_embedding: np.ndarray,
     gallery_embeddings: Iterable[Dict[str, Any]],
     top_k: int = 5,
-    threshold: float = 0.5,
+    threshold: float = DEFAULT_THRESHOLD,
 ) -> List[SearchResult]:
     query = normalize_embedding(query_embedding)
     if query is None:
@@ -95,7 +96,7 @@ def aggregate_person_embeddings(face_samples: Iterable[Dict[str, Any]], method: 
 def identify_face(
     query_embedding: np.ndarray,
     people_gallery: Iterable[Dict[str, Any]],
-    threshold: float = 0.5,
+    threshold: float = DEFAULT_THRESHOLD,
     top_k: int = 5,
 ) -> List[SearchResult]:
     results = search_gallery(query_embedding, people_gallery, top_k=top_k, threshold=threshold)

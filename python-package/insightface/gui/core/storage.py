@@ -11,10 +11,13 @@ from typing import Any, Dict, Iterable, Iterator, List, Optional
 import numpy as np
 
 from .logging import get_logger
+from .constants import DEFAULT_THRESHOLD
 from .recognition import search_gallery
 from .utils import safe_json_dumps, utc_now_iso
 
 LOGGER = get_logger("storage")
+ALBUM_DIRECTORIES_SETTING = "album.directories"
+ALBUM_RESULTS_SETTING = "album.results"
 
 
 def embedding_to_blob(embedding: np.ndarray | Iterable[float] | None) -> tuple[Optional[bytes], int]:
@@ -424,7 +427,7 @@ class Storage:
         self,
         query_embedding: np.ndarray,
         top_k: int = 5,
-        threshold: float = 0.5,
+        threshold: float = DEFAULT_THRESHOLD,
     ):
         return search_gallery(query_embedding, self.load_all_gallery_embeddings(), top_k=top_k, threshold=threshold)
 
@@ -530,6 +533,125 @@ class Storage:
                 """,
                 (key, str(value), utc_now_iso()),
             )
+
+    def delete_setting(self, key: str) -> None:
+        with self.connect() as conn:
+            conn.execute("DELETE FROM app_settings WHERE key=?", (key,))
+
+    def list_album_directories(self) -> List[str]:
+        raw = self.get_setting(ALBUM_DIRECTORIES_SETTING, "[]")
+        try:
+            values = json.loads(raw or "[]")
+        except Exception:
+            return []
+        if not isinstance(values, list):
+            return []
+        directories = []
+        seen = set()
+        for value in values:
+            path = str(value)
+            if path and path not in seen:
+                directories.append(path)
+                seen.add(path)
+        return directories
+
+    def save_album_directories(self, directories: Iterable[str]) -> None:
+        values = []
+        seen = set()
+        for directory in directories:
+            path = str(directory)
+            if path and path not in seen:
+                values.append(path)
+                seen.add(path)
+        self.set_setting(ALBUM_DIRECTORIES_SETTING, json.dumps(values, ensure_ascii=False))
+
+    def save_album_results(
+        self,
+        clusters: Iterable[Dict[str, Any]],
+        cluster_items: Dict[int, List[Dict[str, Any]]],
+        algorithm: str,
+        cluster_threshold: float,
+        duplicate_threshold: float,
+        min_samples: int,
+    ) -> None:
+        now = utc_now_iso()
+        serializable_clusters: List[Dict[str, Any]] = []
+        assignments: List[tuple[int, int]] = []
+        for cluster in clusters:
+            cluster_id = int(cluster["id"])
+            items = cluster_items.get(cluster_id, [])
+            face_ids = [int(item["id"]) for item in items if item.get("id") is not None]
+            for face_id in face_ids:
+                assignments.append((cluster_id, face_id))
+            data = {
+                "id": cluster_id,
+                "label": cluster.get("label"),
+                "name": cluster.get("name", f"Album Person {cluster_id}"),
+                "source": cluster.get("source", "album"),
+                "face_count": int(cluster.get("face_count") or len(face_ids)),
+                "photo_count": int(cluster.get("photo_count") or 0),
+                "avg_quality": float(cluster.get("avg_quality") or 0.0),
+                "thumbnail_path": cluster.get("thumbnail_path") or "",
+                "photos": list(cluster.get("photos") or []),
+                "face_ids": face_ids,
+            }
+            serializable_clusters.append(data)
+        payload = {
+            "version": 1,
+            "algorithm": algorithm,
+            "cluster_threshold": float(cluster_threshold),
+            "duplicate_threshold": float(duplicate_threshold),
+            "min_samples": int(min_samples),
+            "clusters": serializable_clusters,
+            "updated_at": now,
+        }
+        with self.connect() as conn:
+            conn.execute(
+                """
+                INSERT INTO app_settings (key, value, updated_at)
+                VALUES (?, ?, ?)
+                ON CONFLICT(key) DO UPDATE SET value=excluded.value, updated_at=excluded.updated_at
+                """,
+                (ALBUM_RESULTS_SETTING, json.dumps(payload, ensure_ascii=False), now),
+            )
+            conn.execute("UPDATE media_faces SET cluster_id=NULL, updated_at=?", (now,))
+            conn.executemany(
+                "UPDATE media_faces SET cluster_id=?, status='clustered', updated_at=? WHERE id=?",
+                [(cluster_id, now, face_id) for cluster_id, face_id in assignments],
+            )
+
+    def load_album_results(self) -> Dict[str, Any]:
+        raw = self.get_setting(ALBUM_RESULTS_SETTING, "{}")
+        try:
+            data = json.loads(raw or "{}")
+        except Exception:
+            return {}
+        return data if isinstance(data, dict) else {}
+
+    def clear_album_results(self) -> None:
+        now = utc_now_iso()
+        with self.connect() as conn:
+            conn.execute("DELETE FROM app_settings WHERE key=?", (ALBUM_RESULTS_SETTING,))
+            conn.execute("UPDATE media_faces SET cluster_id=NULL, updated_at=?", (now,))
+
+    def delete_media_items_by_paths(self, paths: Iterable[str]) -> int:
+        values = [str(path) for path in paths]
+        if not values:
+            return 0
+        deleted = 0
+        with self.connect() as conn:
+            for index in range(0, len(values), 900):
+                chunk = values[index : index + 900]
+                placeholders = ",".join("?" for _ in chunk)
+                rows = conn.execute(f"SELECT id FROM media_items WHERE path IN ({placeholders})", chunk).fetchall()
+                media_ids = [int(row["id"]) for row in rows]
+                if not media_ids:
+                    continue
+                id_placeholders = ",".join("?" for _ in media_ids)
+                conn.execute(f"DELETE FROM media_faces WHERE media_id IN ({id_placeholders})", media_ids)
+                conn.execute(f"DELETE FROM media_items WHERE id IN ({id_placeholders})", media_ids)
+                deleted += len(media_ids)
+        return deleted
 
     def existing_media_paths(self, paths: Iterable[str]) -> set[str]:
         values = [str(path) for path in paths]

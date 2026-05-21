@@ -22,7 +22,7 @@ class AlbumPeoplePage(BasePage):
         self.threshold = QDoubleSpinBox()
         self.threshold.setRange(0.01, 0.99)
         self.threshold.setSingleStep(0.01)
-        self.threshold.setValue(0.30)
+        self.threshold.setValue(0.28)
         self.content.addWidget(self.notice("Clustering is approximate. Please review and correct groups manually."))
         self.folder_input = DropInput("Album Folder", mode="folder")
         self.folder_input.pathsChanged.connect(lambda paths: self.set_folder(paths[0]) if paths else self.clear_folder())

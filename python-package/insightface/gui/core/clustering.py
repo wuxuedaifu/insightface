@@ -11,7 +11,7 @@ from .recognition import cosine_similarity, normalize_embedding
 
 def cluster_embeddings(
     embeddings: Iterable[np.ndarray],
-    threshold: float = 0.55,
+    threshold: float = 0.72,
     min_samples: int = 2,
 ) -> List[int]:
     labels, _ = cluster_embeddings_dbscan(
@@ -24,7 +24,7 @@ def cluster_embeddings(
 
 def cluster_embeddings_dbscan(
     embeddings: Iterable[np.ndarray],
-    distance_threshold: float = 0.3,
+    distance_threshold: float = 0.28,
     min_samples: int = 2,
 ) -> tuple[List[int], str]:
     normalized = [normalize_embedding(embedding) for embedding in embeddings]

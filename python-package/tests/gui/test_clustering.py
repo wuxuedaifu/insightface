@@ -11,7 +11,7 @@ def test_dbscan_default_distance_threshold_groups_near_faces():
         np.array([0.08, 0.98], dtype=np.float32),
     ]
 
-    labels, algorithm = cluster_embeddings_dbscan(embeddings, distance_threshold=0.3, min_samples=2)
+    labels, algorithm = cluster_embeddings_dbscan(embeddings, min_samples=2)
 
     assert algorithm in {"DBSCAN", "centroid fallback"}
     assert len(labels) == 4

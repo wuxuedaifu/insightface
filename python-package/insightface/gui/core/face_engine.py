@@ -11,7 +11,7 @@ from typing import Any, Dict, Iterable, List, Optional
 
 import numpy as np
 
-from .constants import AUTO_DET_SIZES, DEFAULT_DET_SIZE, DEFAULT_MODEL_NAME
+from .constants import AUTO_DET_SIZES, DEFAULT_DET_SIZE, DEFAULT_MODEL_NAME, DEFAULT_THRESHOLD
 from .logging import get_logger
 from .models import CompareResult, FaceRecord
 from .quality import score_face
@@ -291,7 +291,7 @@ class FaceEngine:
         self,
         image1: np.ndarray,
         image2: np.ndarray,
-        threshold: float = 0.5,
+        threshold: float = DEFAULT_THRESHOLD,
         path1: Optional[str] = None,
         path2: Optional[str] = None,
     ) -> CompareResult:

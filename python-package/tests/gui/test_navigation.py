@@ -57,3 +57,4 @@ def test_default_detection_size_is_auto(tmp_path):
 
     assert cfg.det_size == [0, 0]
     assert cfg.det_size_label == "Auto"
+    assert cfg.recognition_threshold == 0.28
