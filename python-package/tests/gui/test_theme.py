@@ -36,6 +36,8 @@ def test_application_stylesheet_contains_theme_specific_controls():
     for value in ["precision_light", "studio_dark", "graphite_pro", "azure_lab", "emerald_focus", "crimson_audit"]:
         stylesheet = application_stylesheet(value)
         assert "QFrame#uploadPreview" in stylesheet
+        assert "QGraphicsView#imageViewer" in stylesheet
+        assert "QWidget#imageViewerViewport" in stylesheet
         assert "QPushButton#removeUpload" in stylesheet
         assert "QWidget#dashboardCard" in stylesheet
         assert "QLabel[role=\"statusChip\"]" in stylesheet

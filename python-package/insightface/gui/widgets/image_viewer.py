@@ -23,6 +23,8 @@ class ImageViewer(QGraphicsView):
 
     def __init__(self, parent=None):
         super().__init__(parent)
+        self.setObjectName("imageViewer")
+        self.viewport().setObjectName("imageViewerViewport")
         self.setRenderHints(QPainter.Antialiasing | QPainter.SmoothPixmapTransform)
         self.setDragMode(QGraphicsView.ScrollHandDrag)
         self.setTransformationAnchor(QGraphicsView.AnchorUnderMouse)

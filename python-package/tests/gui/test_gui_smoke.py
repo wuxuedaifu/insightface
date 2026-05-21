@@ -30,6 +30,9 @@ def test_main_window_smoke(tmp_path):
     assert "Mode: waiting for gallery" not in label_texts
     for button in verification_page.findChildren(QPushButton):
         assert button.toolTip()
+    face_swap_page = window.page_registry.get("image_face_swap")
+    assert face_swap_page.output_view.objectName() == "imageViewer"
+    assert face_swap_page.output_view.viewport().objectName() == "imageViewerViewport"
     for mode in AppMode:
         window.change_mode(mode)
         assert window.sidebar_list.count() > 0

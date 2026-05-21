@@ -485,6 +485,14 @@ def application_stylesheet(theme: str | None) -> str:
         background: transparent;
         border: 0;
     }}
+    QGraphicsView#imageViewer {{
+        background: {palette["upload_bg"]};
+        border: 1px solid {palette["border"]};
+        border-radius: 6px;
+    }}
+    QWidget#imageViewerViewport {{
+        background: {palette["upload_bg"]};
+    }}
     QLabel#uploadPrompt, QLabel#dropPrompt {{
         color: {palette["muted"]};
         font-size: 15px;
