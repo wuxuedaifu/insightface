@@ -3,11 +3,12 @@
 from __future__ import annotations
 
 from collections import defaultdict
+from io import BytesIO
 from pathlib import Path
 
 import numpy as np
 from PySide6.QtCore import QEvent, QSize, Qt, QUrl, Signal
-from PySide6.QtGui import QCursor, QDesktopServices, QIcon, QPixmap
+from PySide6.QtGui import QCursor, QDesktopServices, QIcon, QImage, QPixmap
 from PySide6.QtWidgets import (
     QAbstractItemView,
     QFileDialog,
@@ -634,9 +635,14 @@ class AlbumPage(BasePage):
     def _icon_from_bytes(data, size: QSize) -> QIcon | None:
         if not data:
             return None
-        pixmap = QPixmap()
-        if not pixmap.loadFromData(bytes(data), b"WEBP"):
-            return None
-        if pixmap.isNull():
+        try:
+            from PIL import Image
+
+            with Image.open(BytesIO(bytes(data))) as image:
+                rgba = image.convert("RGBA")
+                raw = rgba.tobytes("raw", "RGBA")
+                qimage = QImage(raw, rgba.width, rgba.height, QImage.Format_RGBA8888).copy()
+            pixmap = QPixmap.fromImage(qimage)
+        except Exception:
             return None
         return QIcon(pixmap.scaled(size, Qt.KeepAspectRatio, Qt.SmoothTransformation))
