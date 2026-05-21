@@ -16,13 +16,15 @@ class ModelManagerDialog(QDialog):
         super().__init__(parent)
         self.context = context
         self.setWindowTitle("Models")
-        self.resize(980, 680)
+        self.setMinimumSize(1120, 700)
+        self.resize(1240, 740)
         layout = QVBoxLayout(self)
         self.tabs = QTabWidget()
         self.runtime_page = ModelSettingsPage(context)
         self.downloads_page = ModelDownloadPage(context)
         self.tabs.addTab(self.runtime_page, "Runtime")
         self.tabs.addTab(self.downloads_page, "Downloads")
+        self.tabs.currentChanged.connect(self._refresh_current_tab)
         layout.addWidget(self.tabs, 1)
         self.status_label = QLabel("")
         self.status_label.setWordWrap(True)
@@ -31,14 +33,39 @@ class ModelManagerDialog(QDialog):
     def open_page(self, label: str) -> None:
         if label == "Model Downloads":
             self.tabs.setCurrentWidget(self.downloads_page)
+            self.downloads_page.refresh()
         elif label == "Model Settings":
             self.tabs.setCurrentWidget(self.runtime_page)
+            self.runtime_page.refresh()
 
     def set_status(self, message: str) -> None:
         self.status_label.setText(message)
         self.modelChanged.emit()
         if self.parent() is not None and hasattr(self.parent(), "set_status"):
             self.parent().set_status(message)
+
+    def run_task(self, title: str, fn, on_result=None, show_dialog: bool = True) -> None:
+        parent = self.parent()
+        if parent is not None and hasattr(parent, "run_task"):
+            parent.run_task(title, fn, on_result, show_dialog=show_dialog)
+            return
+        try:
+            result = fn()
+            if on_result:
+                on_result(result)
+        except Exception as exc:
+            self.set_status(str(exc))
+
+    def refresh_model_pages(self) -> None:
+        self.runtime_page.refresh()
+        self.downloads_page.populate()
+        self.modelChanged.emit()
+
+    def _refresh_current_tab(self, index: int | None = None) -> None:
+        del index
+        widget = self.tabs.currentWidget()
+        if hasattr(widget, "refresh"):
+            widget.refresh()
 
     def refresh_statusbar(self) -> None:
         self.modelChanged.emit()

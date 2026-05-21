@@ -55,6 +55,7 @@ class ModelDownloadPage(BasePage):
             ["asset", "source", "kind", "release", "size", "updated_at", "local status", "download url"]
         )
         configure_table_columns(self.table, [210, 100, 150, 130, 90, 170, 150, 360])
+        self.table.setMinimumHeight(400)
         self.content.addWidget(self.table, 1)
         self.url_label = QLabel()
         self.url_label.setWordWrap(True)
@@ -110,6 +111,8 @@ class ModelDownloadPage(BasePage):
 
         def task(progress=None, is_cancelled=None):
             del is_cancelled
+            if progress:
+                progress(0, asset.size or 1, f"Connecting to download {asset.name}")
             return download_model_asset(
                 asset,
                 model_root=self.context.config.model_root,
@@ -118,7 +121,18 @@ class ModelDownloadPage(BasePage):
             )
 
         def done(path):
+            path = Path(path)
+            lower_name = asset.name.lower()
+            if "gfpgan" in lower_name:
+                self.context.config.gfpgan_model_path = str(path)
+                save_config(self.context.config)
+            elif "swap" in lower_name or "inswapper" in lower_name:
+                self.context.config.swap_model_path = str(path)
+                save_config(self.context.config)
             self.populate()
+            manager = self.window()
+            if hasattr(manager, "refresh_model_pages"):
+                manager.refresh_model_pages()
             self.set_status(f"Downloaded {asset.name} to {path}")
 
         self.run_task(f"Downloading {asset.name}", task, done)

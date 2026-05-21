@@ -1,5 +1,6 @@
 import pytest
 import os
+from pathlib import Path
 
 
 def test_main_window_smoke(tmp_path):
@@ -19,7 +20,13 @@ def test_main_window_smoke(tmp_path):
 
     configure_qt_plugin_paths()
     app = QApplication.instance() or QApplication([])
-    cfg = AppConfig(workspace_path=str(tmp_path), auto_load_model=False, safe_mode=True, recognition_threshold=0.61)
+    cfg = AppConfig(
+        workspace_path=str(tmp_path),
+        model_root=str(tmp_path / "model-root"),
+        auto_load_model=False,
+        safe_mode=True,
+        recognition_threshold=0.61,
+    )
     storage = Storage(cfg.database_path)
     engine = FaceEngine(model_name=cfg.model_name)
     window = MainWindow(StudioContext(cfg, True, storage, engine, str(tmp_path / "app.log")))
@@ -55,6 +62,9 @@ def test_main_window_smoke(tmp_path):
     assert not hasattr(settings_dialog, "workspace")
     assert not hasattr(settings_dialog, "default_mode")
     model_dialog = ModelManagerDialog(window.context, window)
+    assert model_dialog.minimumWidth() >= 1120
+    assert model_dialog.downloads_page.table.minimumHeight() >= 400
+    assert hasattr(model_dialog, "run_task")
     assert model_dialog.downloads_page.table.selectionBehavior() == QAbstractItemView.SelectRows
     assert model_dialog.downloads_page.table.selectionMode() == QAbstractItemView.SingleSelection
     assert not hasattr(model_dialog.runtime_page, "threshold")
@@ -62,6 +72,12 @@ def test_main_window_smoke(tmp_path):
     assert not hasattr(model_dialog.runtime_page, "frame_interval")
     assert hasattr(model_dialog.runtime_page, "gfpgan_enabled")
     assert hasattr(model_dialog.runtime_page, "gfpgan_model_combo")
+    assert not model_dialog.runtime_page.gfpgan_enabled.isEnabled()
+    gfpgan_path = Path(cfg.model_root) / "models" / "GFPGANv1.4" / "GFPGANv1.4.onnx"
+    gfpgan_path.parent.mkdir(parents=True)
+    gfpgan_path.write_bytes(b"fake")
+    model_dialog.runtime_page.refresh()
+    assert model_dialog.runtime_page.gfpgan_enabled.isEnabled()
     dialogs = [settings_dialog, model_dialog, LicenseDialog(window.context, window)]
     for dialog in dialogs:
         dialog.close()
