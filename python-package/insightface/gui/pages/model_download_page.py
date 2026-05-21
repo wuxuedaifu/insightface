@@ -18,6 +18,7 @@ from ..core.model_downloads import (
     local_model_status,
     refresh_model_assets,
 )
+from ..widgets.table_utils import configure_table_columns, refresh_table_columns
 from .base import BasePage
 
 
@@ -50,6 +51,7 @@ class ModelDownloadPage(BasePage):
         self.table.setHorizontalHeaderLabels(
             ["asset", "kind", "release", "size", "updated_at", "local status", "download url"]
         )
+        configure_table_columns(self.table, [210, 80, 110, 90, 170, 130, 360])
         self.content.addWidget(self.table, 1)
         self.url_label = QLabel()
         self.url_label.setWordWrap(True)
@@ -74,7 +76,7 @@ class ModelDownloadPage(BasePage):
             ]
             for col, value in enumerate(values):
                 self.table.setItem(row, col, QTableWidgetItem(str(value)))
-        self.table.resizeColumnsToContents()
+        refresh_table_columns(self.table)
         self.url_label.setText(
             f"Refresh source: {GITHUB_RELEASES_URL}. Local model root: {Path(self.context.config.model_root).expanduser() / 'models'}"
         )

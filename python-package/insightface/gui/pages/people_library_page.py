@@ -23,6 +23,7 @@ from PySide6.QtWidgets import (
 
 from ..core.exporters import export_csv
 from ..core.utils import list_images, read_image, save_image, timestamp_for_filename
+from ..widgets.table_utils import configure_table_columns, refresh_table_columns
 from .base import BasePage
 
 
@@ -164,6 +165,7 @@ class PeopleLibraryPage(BasePage):
         self.people_table = QTableWidget(0, 3)
         self.people_table.setHorizontalHeaderLabels(["ID", "Thumbnail", "Name"])
         self.people_table.setIconSize(QSize(48, 48))
+        configure_table_columns(self.people_table, [60, 90, 240])
         self.people_table.currentCellChanged.connect(self.on_person_selected)
         left_layout.addWidget(self.people_table, 1)
         left_layout.addWidget(self.row(self.button("Add Person", self.add_person), self.button("Delete", self.delete_person), self.button("Export Summary", self.export_summary)))
@@ -176,6 +178,7 @@ class PeopleLibraryPage(BasePage):
         right_layout.addWidget(self.row(self.button("Save Details", self.save_details)))
         self.samples_table = QTableWidget(0, 7)
         self.samples_table.setHorizontalHeaderLabels(["id", "crop_path", "det_score", "quality_score", "model_name", "provider", "source_image_path"])
+        configure_table_columns(self.samples_table, [60, 260, 90, 100, 130, 110, 320])
         right_layout.addWidget(self.samples_table)
 
         splitter.addWidget(left)
@@ -204,7 +207,7 @@ class PeopleLibraryPage(BasePage):
             self.people_table.setRowHeight(row, 54)
             if current_id == person["id"]:
                 self.people_table.selectRow(row)
-        self.people_table.resizeColumnsToContents()
+        refresh_table_columns(self.people_table)
         if current_id and any(person["id"] == current_id for person in self.people):
             self.selected_person_id = current_id
         elif self.people:
@@ -341,7 +344,7 @@ class PeopleLibraryPage(BasePage):
         for row, sample in enumerate(samples):
             for col, key in enumerate(columns):
                 self.samples_table.setItem(row, col, QTableWidgetItem(str(sample.get(key, ""))))
-        self.samples_table.resizeColumnsToContents()
+        refresh_table_columns(self.samples_table)
 
     def export_summary(self) -> None:
         path = Path(self.context.config.export_dir) / f"people_summary_{timestamp_for_filename()}.csv"

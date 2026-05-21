@@ -10,6 +10,7 @@ from PySide6.QtWidgets import QInputDialog, QSplitter, QTableWidget, QTableWidge
 
 from ..core.exporters import export_csv, export_json
 from ..core.utils import read_image, save_image, timestamp_for_filename
+from ..widgets.table_utils import configure_table_columns, refresh_table_columns
 from ..widgets.threshold_slider import ThresholdSlider
 from ..widgets.upload_preview import UploadPreview
 from .base import BasePage
@@ -48,6 +49,7 @@ class FaceSearchPage(BasePage):
         self.table = QTableWidget(0, 8)
         self.table.setIconSize(QSize(48, 48))
         self.table.setHorizontalHeaderLabels(["rank", "person_id", "thumbnail", "person_name", "similarity", "status", "sample_id", "crop_path"])
+        configure_table_columns(self.table, [60, 90, 90, 190, 90, 110, 90, 280])
         right_layout.addWidget(self.table)
         splitter.addWidget(left)
         splitter.addWidget(right)
@@ -111,7 +113,7 @@ class FaceSearchPage(BasePage):
                             item.setIcon(icon)
                     self.table.setItem(row, col, item)
                 self.table.setRowHeight(row, 54)
-            self.table.resizeColumnsToContents()
+            refresh_table_columns(self.table)
             self.set_status(f"Search complete. {len(self.results)} result(s).")
 
         self.run_task("Searching people library", task, done)

@@ -8,6 +8,7 @@ import numpy as np
 from PySide6.QtCore import QDir, QEvent, QSize, Qt, QUrl, Signal
 from PySide6.QtGui import QCursor, QDesktopServices, QIcon, QPixmap
 from PySide6.QtWidgets import (
+    QDoubleSpinBox,
     QFrame,
     QHBoxLayout,
     QLabel,
@@ -27,11 +28,12 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from ..core.constants import IMAGE_EXTENSIONS
+from ..core.config import save_config
+from ..core.constants import DEFAULT_THRESHOLD, IMAGE_EXTENSIONS
 from ..core.recognition import compare_embeddings
 from ..core.tooltips import apply_button_tooltips, set_button_tooltip
 from ..core.utils import list_images, read_image
-from ..widgets.threshold_slider import ThresholdSlider
+from ..widgets.table_utils import configure_table_columns, refresh_table_columns
 from ..widgets.upload_preview import UploadPreview
 from .base import BasePage
 
@@ -310,6 +312,9 @@ class VerificationPage(BasePage):
         self.query_image: np.ndarray | None = None
         self.gallery_paths: list[str] = []
         self.results: list[dict] = []
+        if abs(float(context.config.recognition_threshold) - DEFAULT_THRESHOLD) > 1e-9:
+            context.config.recognition_threshold = DEFAULT_THRESHOLD
+            save_config(context.config)
 
         self.content.addWidget(self.notice("All processing is local by default. Uploaded query and gallery files are not copied or uploaded automatically."))
         splitter = QSplitter(Qt.Horizontal)
@@ -337,24 +342,31 @@ class VerificationPage(BasePage):
         self.content.addWidget(splitter, 1)
 
         control_row = QHBoxLayout()
-        self.threshold = ThresholdSlider(context.config.recognition_threshold)
+        self.threshold = QDoubleSpinBox()
+        self.threshold.setRange(0.01, 0.99)
+        self.threshold.setSingleStep(0.01)
+        self.threshold.setDecimals(2)
+        self.threshold.setValue(DEFAULT_THRESHOLD)
+        self.threshold.setToolTip("Similarity threshold for matching query and gallery faces.")
         self.run_button = QPushButton("Run Recognition")
         self.run_button.clicked.connect(self.run_verification)
         self.clear_button = QPushButton("Clear")
         self.clear_button.clicked.connect(self.clear_all)
         set_button_tooltip(self.run_button)
         set_button_tooltip(self.clear_button)
+        control_row.addWidget(QLabel("Recognition threshold"))
+        control_row.addWidget(self.threshold)
         control_row.addStretch(1)
         control_row.addWidget(self.run_button)
         control_row.addWidget(self.clear_button)
         self.content.addLayout(control_row)
-        self.content.addWidget(self.threshold)
 
         self.result_table = QTableWidget(0, 7)
         self.result_table.setIconSize(QSize(56, 56))
         self.result_table.setHorizontalHeaderLabels(
             ["rank", "thumbnail", "gallery_file", "similarity", "threshold", "decision", "det_score"]
         )
+        configure_table_columns(self.result_table, [56, 86, 320, 92, 92, 130, 92])
         self.result_table.cellDoubleClicked.connect(self.open_result)
         self.content.addWidget(self.result_table, 1)
 
@@ -507,7 +519,7 @@ class VerificationPage(BasePage):
                 item.setData(Qt.UserRole, result.get("path", ""))
                 self.result_table.setItem(row_index, col, item)
             self.result_table.setRowHeight(row_index, 64)
-        self.result_table.resizeColumnsToContents()
+        refresh_table_columns(self.result_table)
 
     def _update_mode_label(self) -> None:
         pass

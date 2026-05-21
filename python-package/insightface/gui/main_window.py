@@ -23,6 +23,7 @@ from PySide6.QtWidgets import (
     QMainWindow,
     QMessageBox,
     QPushButton,
+    QSizePolicy,
     QStackedWidget,
     QStatusBar,
     QVBoxLayout,
@@ -258,6 +259,8 @@ class MainWindow(QMainWindow):
         version = QLabel("v1.0")
         version.setProperty("role", "muted")
         self.mode_combo = QComboBox()
+        self.mode_combo.setMinimumWidth(250)
+        self.mode_combo.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
         for mode in NAVIGATION_MODES.values():
             self.mode_combo.addItem(mode.title, mode.id.value)
         self.mode_combo.currentIndexChanged.connect(self._mode_combo_changed)

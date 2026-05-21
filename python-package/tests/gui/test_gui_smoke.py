@@ -19,13 +19,17 @@ def test_main_window_smoke(tmp_path):
 
     configure_qt_plugin_paths()
     app = QApplication.instance() or QApplication([])
-    cfg = AppConfig(workspace_path=str(tmp_path), auto_load_model=False, safe_mode=True)
+    cfg = AppConfig(workspace_path=str(tmp_path), auto_load_model=False, safe_mode=True, recognition_threshold=0.61)
     storage = Storage(cfg.database_path)
     engine = FaceEngine(model_name=cfg.model_name)
     window = MainWindow(StudioContext(cfg, True, storage, engine, str(tmp_path / "app.log")))
     window.show()
+    assert window.mode_combo.minimumWidth() >= 250
     window.open_page("verification")
     verification_page = window.page_registry.get("verification")
+    assert abs(window.context.config.recognition_threshold - 0.28) < 1e-9
+    assert abs(verification_page.threshold.value() - 0.28) < 1e-9
+    assert hasattr(verification_page.result_table, "_proportional_table_sizer")
     label_texts = [label.text() for label in verification_page.findChildren(QLabel)]
     assert "Mode: waiting for gallery" not in label_texts
     for button in verification_page.findChildren(QPushButton):

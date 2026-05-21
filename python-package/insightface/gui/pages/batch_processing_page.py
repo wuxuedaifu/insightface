@@ -9,6 +9,7 @@ from PySide6.QtWidgets import QCheckBox, QLabel, QProgressBar, QSpinBox, QTableW
 from ..core.exporters import export_csv, export_json
 from ..core.utils import list_images, read_image, save_image, timestamp_for_filename
 from ..widgets.drop_input import DropInput
+from ..widgets.table_utils import configure_table_columns, refresh_table_columns
 from .base import BasePage
 
 
@@ -29,6 +30,7 @@ class BatchProcessingPage(BasePage):
         self.progress = QProgressBar()
         self.table = QTableWidget(0, 10)
         self.table.setHorizontalHeaderLabels(["image_path", "face_index", "person_id", "person_name", "similarity", "threshold", "status", "bbox", "det_score", "crop_path"])
+        configure_table_columns(self.table, [300, 80, 80, 160, 90, 90, 110, 220, 90, 260])
         self.folder_input = DropInput("Image Folder", mode="folder")
         self.folder_input.pathsChanged.connect(lambda paths: self.set_folder(paths[0]) if paths else self.clear_folder())
         self.content.addWidget(self.folder_input)
@@ -103,7 +105,7 @@ class BatchProcessingPage(BasePage):
                 if isinstance(value, float):
                     value = f"{value:.4f}"
                 self.table.setItem(row_index, col, QTableWidgetItem(str(value)))
-        self.table.resizeColumnsToContents()
+        refresh_table_columns(self.table)
 
     def export(self) -> None:
         if not self.rows:
