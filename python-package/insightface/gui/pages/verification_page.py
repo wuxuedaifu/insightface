@@ -320,7 +320,6 @@ class VerificationPage(BasePage):
 
         self.content.addWidget(
             self.notice(
-                "All processing is local by default. Uploaded query and gallery files are not copied or uploaded automatically. "
                 "Gallery face embeddings are cached in memory after the first run and reused while the gallery image list is unchanged. "
                 "Changing only the query image reuses the cached gallery; adding, removing, or clearing gallery images clears and recomputes it."
             )
