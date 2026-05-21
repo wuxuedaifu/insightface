@@ -12,6 +12,7 @@ from ..core import constants
 from ..core.exporters import export_markdown
 from ..core.licensing import allowed_usage_summary, find_license_text, license_summary_text
 from ..core.utils import timestamp_for_filename
+from ..widgets.table_utils import configure_table_columns, refresh_table_columns
 from .base import BasePage
 
 
@@ -24,6 +25,7 @@ class LicenseCenterPage(BasePage):
         self.content.addWidget(self.notice(constants.LICENSE_NOTICE))
         self.table = QTableWidget(0, 2)
         self.table.setHorizontalHeaderLabels(["Usage", "Status"])
+        configure_table_columns(self.table, [260, 420])
         self.content.addWidget(self.table)
         self.license_text = QTextEdit()
         self.license_text.setReadOnly(True)
@@ -61,7 +63,7 @@ class LicenseCenterPage(BasePage):
         for row, (usage, status) in enumerate(summary.items()):
             self.table.setItem(row, 0, QTableWidgetItem(usage))
             self.table.setItem(row, 1, QTableWidgetItem(status))
-        self.table.resizeColumnsToContents()
+        refresh_table_columns(self.table)
         self.license_text.setPlainText(find_license_text(Path(__file__).parents[4]))
 
     def contact(self) -> None:

@@ -11,6 +11,7 @@ from ..core.clustering import cluster_embeddings_dbscan
 from ..core.exporters import export_csv
 from ..core.utils import list_images, read_image, timestamp_for_filename
 from ..widgets.drop_input import DropInput
+from ..widgets.table_utils import configure_table_columns, refresh_table_columns
 from .base import BasePage
 
 
@@ -30,6 +31,7 @@ class AlbumPeoplePage(BasePage):
         self.content.addWidget(self.row(QLabel("DBSCAN distance threshold"), self.threshold, self.button("Scan and Cluster", self.scan), self.button("Export CSV", self.export)))
         self.table = QTableWidget(0, 5)
         self.table.setHorizontalHeaderLabels(["cluster_id", "face_count", "photo_count", "average_quality", "sample_paths"])
+        configure_table_columns(self.table, [100, 100, 100, 120, 360])
         self.content.addWidget(self.table, 1)
 
     def set_folder(self, folder: str) -> None:
@@ -85,7 +87,7 @@ class AlbumPeoplePage(BasePage):
                 if isinstance(value, float):
                     value = f"{value:.4f}"
                 self.table.setItem(row_index, col, QTableWidgetItem(str(value)))
-        self.table.resizeColumnsToContents()
+        refresh_table_columns(self.table)
 
     def export(self) -> None:
         if not self.rows:

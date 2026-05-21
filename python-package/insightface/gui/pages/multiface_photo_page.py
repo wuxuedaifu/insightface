@@ -9,6 +9,7 @@ from PySide6.QtWidgets import QSplitter, QTableWidget, QTableWidgetItem, QVBoxLa
 
 from ..core.exporters import export_annotated_image, export_csv, export_json
 from ..core.utils import read_image, save_image, timestamp_for_filename
+from ..widgets.table_utils import configure_table_columns, refresh_table_columns
 from ..widgets.upload_preview import UploadPreview
 from .base import BasePage
 
@@ -41,6 +42,7 @@ class MultiFacePhotoPage(BasePage):
         right_layout = QVBoxLayout(right)
         self.table = QTableWidget(0, 6)
         self.table.setHorizontalHeaderLabels(["face_index", "person_name", "similarity", "status", "bbox", "det_score"])
+        configure_table_columns(self.table, [90, 180, 90, 110, 230, 90])
         right_layout.addWidget(self.table)
         splitter.addWidget(left)
         splitter.addWidget(right)
@@ -105,7 +107,7 @@ class MultiFacePhotoPage(BasePage):
                     if isinstance(value, float):
                         value = f"{value:.4f}"
                     self.table.setItem(row_index, col, QTableWidgetItem(str(value)))
-            self.table.resizeColumnsToContents()
+            refresh_table_columns(self.table)
             self.set_status(f"Recognized {len(self.rows)} face(s).")
 
         self.run_task("Recognizing photo", task, done)

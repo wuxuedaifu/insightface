@@ -10,6 +10,7 @@ from ..core.exporters import export_csv
 from ..core.recognition import search_gallery
 from ..core.utils import save_image, timestamp_for_filename
 from ..core.video import iter_video_frames, read_video_thumbnail, timestamp_hhmmss
+from ..widgets.table_utils import configure_table_columns, refresh_table_columns
 from ..widgets.upload_preview import UploadPreview
 from .base import BasePage
 
@@ -33,6 +34,7 @@ class VideoSearchPage(BasePage):
         self.content.addWidget(self.row(QLabel("Target person"), self.person_combo, QLabel("Frame interval"), self.interval, self.button("Refresh People", self.refresh), self.button("Start", self.start), self.button("Export CSV", self.export)))
         self.table = QTableWidget(0, 8)
         self.table.setHorizontalHeaderLabels(["video_path", "timestamp_ms", "timestamp_hhmmss", "frame_index", "person_name", "similarity", "bbox", "crop_path"])
+        configure_table_columns(self.table, [300, 120, 140, 100, 160, 90, 200, 260])
         self.content.addWidget(self.table, 1)
         self.refresh()
 
@@ -96,7 +98,7 @@ class VideoSearchPage(BasePage):
                 if isinstance(value, float):
                     value = f"{value:.4f}"
                 self.table.setItem(row_index, col, QTableWidgetItem(str(value)))
-        self.table.resizeColumnsToContents()
+        refresh_table_columns(self.table)
 
     def export(self) -> None:
         if not self.rows:

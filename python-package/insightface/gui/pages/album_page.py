@@ -28,6 +28,7 @@ from ..core.clustering import cluster_embeddings_dbscan
 from ..core.recognition import cosine_similarity, normalize_embedding
 from ..core.tooltips import set_button_tooltip
 from ..core.utils import list_images, read_image, save_image, timestamp_for_filename
+from ..widgets.table_utils import configure_table_columns, refresh_table_columns
 from .base import BasePage
 
 
@@ -170,12 +171,14 @@ class AlbumPage(BasePage):
         self.cluster_table = QTableWidget(0, 7)
         self.cluster_table.setIconSize(QSize(56, 56))
         self.cluster_table.setHorizontalHeaderLabels(["ID", "Thumbnail", "Name", "Faces", "Photos", "Avg quality", "Source"])
+        configure_table_columns(self.cluster_table, [70, 100, 190, 70, 70, 100, 180])
         self.cluster_table.currentCellChanged.connect(self.cluster_selected)
         splitter.addWidget(self.cluster_table)
 
         self.photo_table = QTableWidget(0, 3)
         self.photo_table.setIconSize(QSize(96, 72))
         self.photo_table.setHorizontalHeaderLabels(["Thumbnail", "File", "Faces in cluster"])
+        configure_table_columns(self.photo_table, [120, 360, 130])
         self.photo_table.cellDoubleClicked.connect(self.open_photo)
         splitter.addWidget(self.photo_table)
         splitter.setStretchFactor(0, 2)
@@ -472,7 +475,7 @@ class AlbumPage(BasePage):
                 item.setData(Qt.UserRole, cluster.get("id"))
                 self.cluster_table.setItem(row, col, item)
             self.cluster_table.setRowHeight(row, 64)
-        self.cluster_table.resizeColumnsToContents()
+        refresh_table_columns(self.cluster_table)
         if self.clusters:
             self.cluster_table.selectRow(0)
             self._populate_photos(int(self.clusters[0].get("id", 0)))
@@ -511,7 +514,7 @@ class AlbumPage(BasePage):
             self.photo_table.setItem(row, 1, file_item)
             self.photo_table.setItem(row, 2, QTableWidgetItem(str(count)))
             self.photo_table.setRowHeight(row, 80)
-        self.photo_table.resizeColumnsToContents()
+        refresh_table_columns(self.photo_table)
 
     def open_photo(self, row: int, column: int) -> None:
         item = self.photo_table.item(row, 0) or self.photo_table.item(row, 1)

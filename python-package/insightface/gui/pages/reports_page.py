@@ -12,6 +12,7 @@ from ..core.exporters import export_csv
 from ..core.models import EvaluationResult
 from ..core.reporting import write_reports
 from ..core.utils import timestamp_for_filename, utc_now_iso
+from ..widgets.table_utils import configure_table_columns, refresh_table_columns
 from .base import BasePage
 
 
@@ -22,6 +23,7 @@ class ReportsPage(BasePage):
         self.content.addWidget(self.row(self.button("Refresh", self.refresh), self.button("Open Selected Report", self.open_selected), self.button("Re-export Selected", self.reexport_selected), self.button("Delete Selected", self.delete_selected), self.button("Export All Summary", self.export_summary)))
         self.table = QTableWidget(0, 7)
         self.table.setHorizontalHeaderLabels(["id", "date", "scenario", "model", "provider", "threshold", "report_path"])
+        configure_table_columns(self.table, [60, 180, 180, 130, 110, 90, 360])
         self.content.addWidget(self.table, 1)
         self.refresh()
 
@@ -32,7 +34,7 @@ class ReportsPage(BasePage):
             values = [run["id"], run["created_at"], run["scenario"], run["model_name"], run["provider"], run["threshold"], run["report_path"]]
             for col, value in enumerate(values):
                 self.table.setItem(row_index, col, QTableWidgetItem(str(value)))
-        self.table.resizeColumnsToContents()
+        refresh_table_columns(self.table)
 
     def _selected_run(self):
         row = self.table.currentRow()
