@@ -25,8 +25,8 @@ def _result():
 
 def test_reporting_markdown_html():
     result = _result()
-    md = generate_markdown_report(result)
-    html = generate_html_report(result)
+    md = generate_markdown_report(result, language="en")
+    html = generate_html_report(result, language="en")
     assert "InsightFace Enterprise Evaluation Report" in md
     assert "Commercial Licensing Next Steps" in md
     assert "report interpretation" in md

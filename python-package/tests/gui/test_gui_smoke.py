@@ -38,6 +38,7 @@ def test_main_window_smoke(tmp_path):
         auto_load_model=False,
         safe_mode=True,
         recognition_threshold=0.61,
+        ui_language="en",
     )
     storage = Storage(cfg.database_path)
     engine = FaceEngine(model_name=cfg.model_name)
