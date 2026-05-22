@@ -41,6 +41,14 @@ def test_album_mode_is_single_workspace():
     assert items[0].page_key == "album"
 
 
+def test_enterprise_mode_is_single_evaluation_workspace():
+    items = NAVIGATION_MODES[AppMode.ENTERPRISE_EVALUATION].items
+
+    assert len(items) == 1
+    assert items[0].title == "Enterprise Evaluation"
+    assert items[0].page_key == "enterprise_evaluation"
+
+
 def test_mode_persistence(tmp_path):
     cfg = AppConfig(workspace_path=str(tmp_path))
     cfg.ui_last_mode = AppMode.FACE_SWAP.value
@@ -59,7 +67,7 @@ def test_default_detection_size_is_auto(tmp_path):
 
     assert cfg.det_size == [0, 0]
     assert cfg.det_size_label == "Auto"
-    assert cfg.recognition_threshold == 0.28
+    assert cfg.recognition_threshold == 0.4
 
 
 def test_threshold_slider_default_is_028():
@@ -74,7 +82,7 @@ def test_threshold_slider_default_is_028():
     configure_qt_plugin_paths()
     _app = QApplication.instance() or QApplication([])
     slider = ThresholdSlider()
-    assert slider.value() == 0.28
+    assert slider.value() == 0.4
 
 
 def test_qt_plugin_paths_are_configured(monkeypatch):

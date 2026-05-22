@@ -8,6 +8,7 @@ import numpy as np
 from PySide6.QtCore import QDir, QEvent, QSize, Qt, QUrl, Signal
 from PySide6.QtGui import QCursor, QDesktopServices, QIcon, QPixmap
 from PySide6.QtWidgets import (
+    QComboBox,
     QDoubleSpinBox,
     QFrame,
     QHBoxLayout,
@@ -30,6 +31,15 @@ from PySide6.QtWidgets import (
 
 from ..core.config import save_config
 from ..core.constants import DEFAULT_THRESHOLD, IMAGE_EXTENSIONS
+from ..core.evaluation import (
+    MULTI_FACE_REQUIRE_ONE,
+    MULTI_FACE_SKIP,
+    MULTI_FACE_USE_CENTERED_LARGEST,
+    MULTI_FACE_USE_LARGEST,
+    multi_face_policy_help,
+    select_face_by_policy,
+)
+from ..core.i18n import apply_translations, tr
 from ..core.recognition import compare_embeddings
 from ..core.tooltips import apply_button_tooltips, set_button_tooltip
 from ..core.utils import list_images, read_image
@@ -152,6 +162,7 @@ class GalleryUploadPanel(QFrame):
         buttons.rejected.connect(dialog.reject)
         layout.addWidget(buttons)
         apply_button_tooltips(dialog)
+        apply_translations(dialog, self._language())
         if dialog.exec() == QDialog.Accepted:
             indexes = tree.selectionModel().selectedRows(0)
             paths = [model.filePath(index) for index in indexes]
@@ -230,7 +241,12 @@ class GalleryUploadPanel(QFrame):
         self.remove_button.setVisible(has_files and not single)
         self.clear_button.setVisible(has_files)
         count = len(self._paths)
-        self.count_label.setText(f"{count} image" + ("" if count == 1 else "s") if count else "No images")
+        language = self._language()
+        if count:
+            image_label = "image" if count == 1 else "images"
+            self.count_label.setText(f"{count} {tr(image_label, language)}")
+        else:
+            self.count_label.setText(tr("No images", language))
         if single:
             self._update_single_preview()
         self._set_property("hasFiles", has_files)
@@ -297,7 +313,14 @@ class GalleryUploadPanel(QFrame):
             size = self.single_preview.size()
             target = QSize(max(180, size.width() - 24), max(150, size.height() - 12))
             self.single_preview.setPixmap(pixmap.scaled(target, Qt.KeepAspectRatio, Qt.SmoothTransformation))
-        self.single_hint.setText(f"{Path(path).name}\nClick or drag more images or folders to add to Gallery.")
+        self.single_hint.setText(
+            f"{Path(path).name}\n{tr('Click or drag more images or folders to add to Gallery.', self._language())}"
+        )
+
+    def _language(self) -> str | None:
+        context = getattr(self.window(), "context", None)
+        config = getattr(context, "config", None)
+        return getattr(config, "ui_language", None)
 
 
 class VerificationPage(BasePage):
@@ -318,12 +341,8 @@ class VerificationPage(BasePage):
             context.config.recognition_threshold = DEFAULT_THRESHOLD
             save_config(context.config)
 
-        self.content.addWidget(
-            self.notice(
-                "Gallery face embeddings are cached in memory after the first run and reused while the gallery image list is unchanged. "
-                "Changing only the query image reuses the cached gallery; adding, removing, or clearing gallery images clears and recomputes it."
-            )
-        )
+        self.workflow_notice = self.notice("")
+        self.content.addWidget(self.workflow_notice)
         splitter = QSplitter(Qt.Horizontal)
         left = QWidget()
         left_layout = QVBoxLayout(left)
@@ -355,6 +374,18 @@ class VerificationPage(BasePage):
         self.threshold.setDecimals(2)
         self.threshold.setValue(DEFAULT_THRESHOLD)
         self.threshold.setToolTip("Similarity threshold for matching query and gallery faces.")
+        self.multi_face_policy = QComboBox()
+        self.multi_face_policy.setProperty("i18nItems", True)
+        self.multi_face_policy.addItem("Require exactly one face", MULTI_FACE_REQUIRE_ONE)
+        self.multi_face_policy.addItem("Use largest face", MULTI_FACE_USE_LARGEST)
+        self.multi_face_policy.addItem("Use largest centered face", MULTI_FACE_USE_CENTERED_LARGEST)
+        self.multi_face_policy.addItem("Mark as skip", MULTI_FACE_SKIP)
+        self.multi_face_policy.setObjectName("verificationMultiFacePolicy")
+        self.multi_face_policy.setToolTip("Choose how query and gallery images handle multiple detected faces.")
+        default_policy_index = self.multi_face_policy.findData(MULTI_FACE_USE_CENTERED_LARGEST)
+        if default_policy_index >= 0:
+            self.multi_face_policy.setCurrentIndex(default_policy_index)
+        self.multi_face_policy.currentIndexChanged.connect(self._multi_face_policy_changed)
         self.run_button = QPushButton("Run Recognition")
         self.run_button.clicked.connect(self.run_verification)
         self.clear_button = QPushButton("Clear")
@@ -363,6 +394,8 @@ class VerificationPage(BasePage):
         set_button_tooltip(self.clear_button)
         control_row.addWidget(QLabel("Recognition threshold"))
         control_row.addWidget(self.threshold)
+        control_row.addWidget(QLabel("Multi-face handling"))
+        control_row.addWidget(self.multi_face_policy)
         control_row.addStretch(1)
         control_row.addWidget(self.run_button)
         control_row.addWidget(self.clear_button)
@@ -379,6 +412,7 @@ class VerificationPage(BasePage):
         configure_table_columns(self.result_table, [56, 86, 320, 92, 92, 130, 92])
         self.result_table.cellDoubleClicked.connect(self.open_result)
         self.content.addWidget(self.result_table, 1)
+        self._update_policy_notice()
 
     def load_query(self, path: str) -> None:
         image = read_image(path)
@@ -428,7 +462,8 @@ class VerificationPage(BasePage):
         query_image = self.query_image.copy()
         query_path = self.query_path
         gallery_paths = list(self.gallery_paths)
-        gallery_key = tuple(gallery_paths)
+        multi_face_policy = self._multi_face_policy()
+        gallery_key = (multi_face_policy, *gallery_paths)
         cached_gallery = (
             list(self._gallery_embedding_cache)
             if self._gallery_embedding_cache_key == gallery_key and self._gallery_embedding_cache is not None
@@ -437,7 +472,14 @@ class VerificationPage(BasePage):
         threshold = self.threshold.value()
 
         def task(progress=None, is_cancelled=None):
-            query_face = self.context.engine.detect_best_face(query_image, source_path=query_path)
+            query_faces = self.context.engine.detect_faces(query_image, source_path=query_path)
+            query_face = select_face_by_policy(
+                query_faces,
+                query_image.shape,
+                multi_face_policy,
+                path=query_path,
+                stage="query",
+            )
             if query_face is None or query_face.normed_embedding is None:
                 raise ValueError("No face detected in the query image or embedding unavailable.")
             if cached_gallery is not None:
@@ -445,7 +487,12 @@ class VerificationPage(BasePage):
                 if progress:
                     progress(1, 1, "Using cached gallery embeddings")
             else:
-                gallery_cache = self._build_gallery_embedding_cache(gallery_paths, progress, is_cancelled)
+                gallery_cache = self._build_gallery_embedding_cache(
+                    gallery_paths,
+                    multi_face_policy,
+                    progress,
+                    is_cancelled,
+                )
             rows = self._compare_query_to_gallery_cache(query_face.normed_embedding, gallery_cache, threshold)
             rows.sort(
                 key=lambda item: item["similarity"] if isinstance(item.get("similarity"), (int, float)) else -1.0,
@@ -459,13 +506,19 @@ class VerificationPage(BasePage):
                 "results": rows,
                 "mode": mode,
                 "query_path": query_path,
+                "gallery_paths": tuple(gallery_paths),
                 "gallery_key": gallery_key,
                 "gallery_cache": gallery_cache,
+                "multi_face_policy": multi_face_policy,
             }
 
         def done(payload):
-            if self.query_path != payload["query_path"] or tuple(self.gallery_paths) != payload["gallery_key"]:
-                self.set_status("Recognition result ignored because query or gallery changed during processing.")
+            if (
+                self.query_path != payload["query_path"]
+                or tuple(self.gallery_paths) != payload["gallery_paths"]
+                or self._multi_face_policy() != payload["multi_face_policy"]
+            ):
+                self.set_status("Recognition result ignored because query, gallery, or multi-face handling changed during processing.")
                 return
             if cached_gallery is None:
                 self._gallery_embedding_cache_key = payload["gallery_key"]
@@ -517,7 +570,13 @@ class VerificationPage(BasePage):
         self._gallery_embedding_cache_key = None
         self._gallery_embedding_cache = None
 
-    def _build_gallery_embedding_cache(self, gallery_paths: list[str], progress=None, is_cancelled=None) -> list[dict]:
+    def _build_gallery_embedding_cache(
+        self,
+        gallery_paths: list[str],
+        multi_face_policy: str,
+        progress=None,
+        is_cancelled=None,
+    ) -> list[dict]:
         cache: list[dict] = []
         for index, path in enumerate(gallery_paths):
             if is_cancelled and is_cancelled():
@@ -526,19 +585,29 @@ class VerificationPage(BasePage):
             if image is None:
                 cache.append(self._gallery_error_cache_item(path, "Image read failure."))
             else:
-                face = self.context.engine.detect_best_face(image, source_path=path)
-                if face is None or face.normed_embedding is None:
-                    cache.append(self._gallery_error_cache_item(path, "No face detected."))
-                else:
-                    cache.append(
-                        {
-                            "path": path,
-                            "embedding": np.asarray(face.normed_embedding, dtype=np.float32).copy(),
-                            "det_score": face.det_score,
-                            "bbox": face.bbox,
-                            "notes": "",
-                        }
+                try:
+                    faces = self.context.engine.detect_faces(image, source_path=path)
+                    face = select_face_by_policy(
+                        faces,
+                        image.shape,
+                        multi_face_policy,
+                        path=path,
+                        stage="gallery",
                     )
+                    if face is None or face.normed_embedding is None:
+                        cache.append(self._gallery_error_cache_item(path, "No face detected."))
+                    else:
+                        cache.append(
+                            {
+                                "path": path,
+                                "embedding": np.asarray(face.normed_embedding, dtype=np.float32).copy(),
+                                "det_score": face.det_score,
+                                "bbox": face.bbox,
+                                "notes": "",
+                            }
+                        )
+                except Exception as exc:
+                    cache.append(self._gallery_error_cache_item(path, str(exc)))
             if progress:
                 progress(
                     index + 1,
@@ -599,3 +668,29 @@ class VerificationPage(BasePage):
             "bbox": None,
             "notes": message,
         }
+
+    def _multi_face_policy(self) -> str:
+        return str(self.multi_face_policy.currentData() or MULTI_FACE_REQUIRE_ONE)
+
+    def _multi_face_policy_changed(self) -> None:
+        self._clear_gallery_embedding_cache()
+        if hasattr(self, "result_table"):
+            self.results = []
+            self.result_table.setRowCount(0)
+        if hasattr(self, "query_input"):
+            self.query_input.set_faces([])
+        self.set_status("Multi-face handling changed. Gallery embeddings will be recomputed.")
+        self._update_policy_notice()
+
+    def _update_policy_notice(self) -> None:
+        language = self.context.config.ui_language
+        self.workflow_notice.setText(
+            tr(
+                "Gallery face embeddings are cached in memory after the first run and reused while the gallery image list "
+                "and multi-face policy are unchanged. Changing only the query image reuses the cached gallery; adding, "
+                "removing, clearing gallery images, or changing multi-face handling clears and recomputes it.",
+                language,
+            )
+            + " "
+            + tr(multi_face_policy_help(self._multi_face_policy()), language)
+        )

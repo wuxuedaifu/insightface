@@ -7,73 +7,103 @@ SDK/API access, SLA, or custom training path.
 All processing is local by default. No images, embeddings, videos, or reports
 are uploaded automatically.
 
-## KYC / 1:1 Verification
+## 1:1 Verification
 
-Prepare a CSV:
+Select **1:1 Verification**, choose an identity-folder root, and decide whether
+to enable **Auto Split**.
 
-```csv
-image1_path,image2_path,label
-/data/kyc/a1.jpg,/data/kyc/a2.jpg,1
-/data/kyc/a1.jpg,/data/kyc/b1.jpg,0
-```
-
-Labels:
-
-- `1`: same person
-- `0`: different person
-
-The evaluation computes total pairs, positive pairs, negative pairs, failed
-detections, accuracy, FAR, FRR, TAR at FAR targets when data is sufficient,
-recommended threshold, false positive samples, false negative samples, and
-average latency.
-
-## Access Control / 1:N Identification
-
-Prepare a gallery folder with one subfolder per person:
+Identity folders use one subfolder per person:
 
 ```text
-gallery/
-  alice/
-    1.jpg
-    2.jpg
-  bob/
-    1.jpg
+dataset_1v1/
+  0001__Alice/
+    gallery.jpg
+    img002.jpg
+    img003.jpg
+  0002__Bob/
+    img001.jpg
+    img002.jpg
 ```
 
-Prepare a probe folder:
+With **Auto Split**, a file containing `gallery` is used as that identity's
+gallery image. If no such file exists, the first sorted image is used. All
+other images become probes, and every comparison is probe vs gallery across
+identities. Without Auto Split, every image is treated as a probe and the page
+runs full pairwise probe-vs-probe comparisons.
+
+The evaluation reports the best cosine threshold accuracy, the selected
+threshold, positive and negative pair counts, and TAR@FAR for `1e-6`, `1e-5`,
+`1e-4`, and `1e-3` with corresponding thresholds.
+
+## Dataset Validation And Multi-face Policy
+
+Run **Validate Dataset** before every evaluation. The GUI checks folder layout,
+Auto Split rules, gallery/probe availability, generated 1:1 positive and
+negative pairs, 1:N gallery coverage, image readability, and detected face
+counts.
+
+The **Multi-face handling** option controls images with more than one detected
+face:
+
+- **Require exactly one face** is the default and blocks the run when any image
+  contains multiple faces.
+- **Use largest face** keeps the image and uses the largest detected face.
+- **Use largest centered face** keeps the image and selects the face with the
+  best area-minus-center-distance score, favoring large faces near the image
+  center.
+- **Mark as skip** skips multi-face images. If a required gallery image is
+  skipped, validation fails because the gallery sample is unavailable.
+
+## 1:N Identification
+
+Without **Auto Split**, prepare:
 
 ```text
-probe/
-  lobby_001.jpg
-  lobby_002.jpg
+dataset_1n/
+  gallery/
+    0001__Alice/
+      enroll_001.jpg
+    0002__Bob/
+      enroll_001.jpg
+  probe/
+    0001__Alice/
+      test_001.jpg
+    0002__Bob/
+      test_001.jpg
+  unknown/
+    unknown_001.jpg
 ```
 
-Optional ground truth CSV:
+With **Auto Split**, prepare:
 
-```csv
-image_path,person_name
-lobby_001.jpg,alice
-lobby_002.jpg,bob
+```text
+dataset/
+  identities/
+    0001__Alice/
+      img001.jpg
+      img002.jpg
+    0002__Bob/
+      img001.jpg
+      img002.jpg
 ```
 
-The evaluation reports gallery persons, gallery face samples, probe images,
-detected probe faces, Top-1 accuracy, Top-5 accuracy, unknown rejection rate,
-and confusion cases when ground truth is available.
+1:N evaluation always requires gallery images. The report includes Top1 and
+TAR@FAR for `1e-5`, `1e-4`, `1e-3`, and `1e-2`, with corresponding thresholds.
 
 ## Interpreting Metrics
 
 - FAR: false accept rate. Lower means fewer different-person pairs accepted.
 - FRR: false reject rate. Lower means fewer same-person pairs rejected.
 - TAR: true accept rate at a target FAR.
-- Top-1 accuracy: correct person is the first search result.
-- Top-5 accuracy: correct person appears in the first five results.
+- Top1: correct person is the first search result.
 
 Thresholds are business decisions. Higher thresholds usually reduce false
 accepts but increase false rejects.
 
 ## Exporting Reports
 
-Click **Export Report** after an evaluation. Reports include:
+Reports are exported automatically after a run. Click **Export PDF** to choose
+a PDF destination. Reports include:
 
 1. Executive Summary
 2. Evaluation Scenario

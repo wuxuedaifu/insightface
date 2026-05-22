@@ -605,7 +605,6 @@ class Storage:
         cluster_items: Dict[int, List[Dict[str, Any]]],
         algorithm: str,
         cluster_threshold: Optional[float] = None,
-        duplicate_threshold: Optional[float] = None,
         min_samples: int = 2,
         min_face_size: Optional[int] = None,
     ) -> None:
@@ -636,7 +635,6 @@ class Storage:
             "version": 1,
             "algorithm": algorithm,
             "cluster_threshold": float(cluster_threshold) if cluster_threshold is not None else None,
-            "duplicate_threshold": float(duplicate_threshold) if duplicate_threshold is not None else None,
             "min_samples": int(min_samples),
             "min_face_size": int(min_face_size) if min_face_size is not None else None,
             "clusters": serializable_clusters,

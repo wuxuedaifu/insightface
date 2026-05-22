@@ -151,8 +151,10 @@ def run_app(args=None) -> int:
         return 1
 
     from .main_window import MainWindow
+    from .resources import configure_application_metadata
 
     app = QApplication.instance() or QApplication(sys.argv[:1])
+    configure_application_metadata(app)
     context = create_context(args)
     window = MainWindow(context)
     window.resize(1320, 860)

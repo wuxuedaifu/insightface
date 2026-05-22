@@ -60,14 +60,9 @@ NAVIGATION_MODES: dict[AppMode, NavigationMode] = {
     AppMode.ENTERPRISE_EVALUATION: NavigationMode(
         id=AppMode.ENTERPRISE_EVALUATION,
         title="Enterprise Evaluation",
-        description="Evaluate InsightFace models on local business datasets and generate procurement-ready reports.",
+        description="Run local 1:1 and 1:N model evaluations and export reports.",
         items=(
-            NavigationItem("enterprise_dashboard", "Evaluation Dashboard", "enterprise_dashboard", "Start enterprise evaluation workflows."),
-            NavigationItem("enterprise_evaluation", "Run Evaluation", "enterprise_evaluation", "Run local business scenario evaluations."),
-            NavigationItem("enterprise_dataset_setup", "Dataset Setup", "enterprise_dataset_setup", "Prepare local evaluation datasets.", coming_soon=True),
-            NavigationItem("threshold_calibration", "Threshold Calibration", "threshold_calibration", "Review thresholds and operating points.", coming_soon=True),
-            NavigationItem("reports", "Reports", "reports", "Open saved evaluation reports."),
-            NavigationItem("commercial_next_steps", "Commercial Next Steps", "commercial_next_steps", "Review commercial model, SDK, API, SLA, and custom training paths."),
+            NavigationItem("enterprise_evaluation", "Enterprise Evaluation", "enterprise_evaluation", "Run local 1:1 or 1:N identity-folder evaluation and export reports."),
         ),
     ),
 }

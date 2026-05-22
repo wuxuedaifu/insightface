@@ -12,6 +12,7 @@ from PySide6.QtWidgets import QLabel, QSplitter, QVBoxLayout, QWidget
 
 from ..core.constants import IMAGE_EXTENSIONS, VIDEO_EXTENSIONS
 from ..core.face_engine import providers_from_choice
+from ..core.i18n import tr
 from ..core.model_downloads import list_installed_swap_models
 from ..core.swap import FaceSwapEngine
 from ..core.utils import read_image, save_image, timestamp_for_filename
@@ -180,14 +181,20 @@ class FaceSwapPage(BasePage):
                 self.output_video_path = ""
                 self.output_path = result["path"]
                 self.output_view.set_image(self.output_image)
-                self.result_label.setText(f"Image swap saved to {self.output_path}. Click Result to open it.")
+                self.result_label.setText(
+                    tr("Image swap saved. Click Result to open it.", self.context.config.ui_language)
+                    + f"\n{self.output_path}"
+                )
             else:
                 self.output_image = result.get("preview")
                 self.output_video_path = result["path"]
                 self.output_path = result["path"]
                 if self.output_image is not None:
                     self.output_view.set_image(self.output_image)
-                self.result_label.setText(f"Video swap saved to {self.output_video_path}. Click Result to open it.")
+                self.result_label.setText(
+                    tr("Video swap saved. Click Result to open it.", self.context.config.ui_language)
+                    + f"\n{self.output_video_path}"
+                )
             self.set_status(result["message"])
 
         self.run_task("Running face swap", task, done)
@@ -287,7 +294,9 @@ class FaceSwapPage(BasePage):
         self.output_video_path = ""
         self.output_path = ""
         self.output_view.set_image(None)
-        self.result_label.setText("Result preview appears here. Video results are saved to the exports folder.")
+        self.result_label.setText(
+            tr("Result preview appears here. Video results are saved to the exports folder.", self.context.config.ui_language)
+        )
 
     def eventFilter(self, watched, event) -> bool:  # noqa: N802
         if watched in {self.output_view, self.output_view.viewport()} and event.type() == QEvent.MouseButtonRelease:

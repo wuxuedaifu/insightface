@@ -18,6 +18,7 @@ from PySide6.QtWidgets import (
 )
 
 from ..core.constants import LOCAL_PROCESSING_NOTICE
+from ..core.i18n import tr
 from ..core.tooltips import set_button_tooltip
 
 
@@ -88,14 +89,14 @@ class BasePage(QWidget):
         return path or None
 
     def set_status(self, message: str) -> None:
-        self.status_label.setText(message)
+        self.status_label.setText(tr(message, self.context.config.ui_language))
         main = self.window()
         if hasattr(main, "set_status"):
             main.set_status(message)
 
     def show_error(self, message: str) -> None:
         self.set_status(message)
-        QMessageBox.warning(self, self.title, message)
+        QMessageBox.warning(self, tr(self.title, self.context.config.ui_language), tr(message, self.context.config.ui_language))
 
     def run_task(self, title: str, fn: Callable, on_result: Callable | None = None, show_dialog: bool = True) -> None:
         main = self.window()

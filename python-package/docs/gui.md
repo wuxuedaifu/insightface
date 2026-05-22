@@ -59,10 +59,15 @@ clickable drag-and-drop selectors with hover and drag-over color feedback.
 
 ## Mode-based navigation
 
-InsightFace Evaluation Studio uses four workflow modes. The mode selector is in
-the top app bar. Face Recognition, Album Management, and Face Swap use a single
-full-width workspace, while modes with several workflows show a compact left
-sidebar:
+InsightFace Evaluation Studio uses four workflow modes. The mode selector is a
+persistent **Workflows** rail on the left side of the window so the current
+workspace is always visible. Face Recognition, Album Management, and Face Swap
+use a single full-width workspace; modes with several workflows show a compact
+secondary sidebar next to the workflow rail:
+
+The Workflows rail also keeps the local-processing notice visible in every
+mode: **All processing is local. No images, embeddings, or reports are uploaded
+automatically.**
 
 1. **Face Recognition**: one Query & Gallery workspace. One gallery image runs
    1:1 compare; multiple gallery images or a folder run 1:N gallery search.
@@ -70,15 +75,18 @@ sidebar:
    refresh, DBSCAN face clustering, and photo review.
 3. **Face Swap**: one Source + Target = Result workspace. Target can be an
    image or video.
-4. **Enterprise Evaluation**: local business evaluation, dataset setup,
-   threshold calibration, reports, and commercial next steps.
+4. **Enterprise Evaluation**: a single local 1:1 / 1:N evaluation workspace
+   with identity-folder import, Auto Split, metrics, and report export.
 
 Global utilities are always available from the top app bar:
 
-- **Settings** opens the application settings dialog for the UI theme. The
-  included themes are System, Precision Light, Studio Dark, Graphite Pro, Azure
-  Lab, Emerald Focus, and Crimson Audit. Workspace paths are chosen on first
-  launch and are not changed from this dialog.
+- **Settings** opens the application settings dialog for the UI theme and
+  language. Language defaults to the operating system when supported, otherwise
+  English. Supported GUI languages are English, Chinese, Japanese, Korean,
+  Spanish, French, German, Portuguese, and Russian. The included themes are
+  System, Precision Light, Studio Dark, Graphite Pro, Azure Lab, Emerald Focus,
+  and Crimson Audit. Workspace paths are chosen on first launch and are not
+  changed from this dialog.
 - **Models** opens runtime settings, model downloads, and custom model directory
   tools.
 - **License** opens the License Center dialog.
@@ -180,10 +188,11 @@ CSV and JSON.
 
 Open **Album Management > Album** to add one or more album directories. Click
 **Import / Refresh** to scan new image files, detect faces, save local crops,
-and cluster all indexed faces from the selected directories. The page uses
-DBSCAN with a default cosine-distance threshold of `0.28`. If scikit-learn is
-not available, it falls back to a simple centroid grouping strategy and shows
-the algorithm used.
+and cluster all indexed faces from the selected directories. The page exposes a
+cosine similarity threshold with a default value of `0.48`; higher values make
+clusters stricter. DBSCAN internally receives cosine distance as
+`1 - cosine threshold`. If scikit-learn is not available, it falls back to a
+simple centroid grouping strategy and shows the algorithm used.
 
 Album cluster IDs avoid duplicating existing People Library IDs. When a cluster
 matches an existing person within the configured duplicate distance threshold
@@ -205,11 +214,38 @@ results.
 
 Open **Enterprise Evaluation** to run no-code local evaluations:
 
-- KYC / 1:1 Verification with a pairs CSV
-- Access Control / 1:N Identification with gallery and probe folders
+- **1:1 Verification** from identity folders. Each subfolder is one identity.
+  With **Auto Split**, the file containing `gallery` or the first sorted image
+  becomes that identity's gallery image; other images are probes. Matching is
+  probe-vs-gallery across identities. Without Auto Split, all images are probes
+  and the page runs full pairwise probe-vs-probe comparisons.
+- **1:N Identification** from identity folders. With **Auto Split**, select a
+  dataset containing `identities/<identity folders>` or identity folders
+  directly; gallery images are selected with the same rule as 1:1. Without Auto
+  Split, use `gallery/<identity>`, `probe/<identity>`, and optional `unknown/`
+  folders.
 
-Other scenarios are represented as guided placeholders in v1.0 and can be
-handled through their dedicated pages.
+Choose a **Multi-face handling** policy before validation:
+
+- **Require exactly one face**: default. Validation fails if any evaluation
+  image contains more than one detected face.
+- **Use largest face**: validation warns on multi-face images and evaluation
+  uses the largest detected face.
+- **Use largest centered face**: validation warns on multi-face images and
+  evaluation uses the face with the best area-minus-center-distance score.
+- **Mark as skip**: multi-face images are skipped. If a required gallery image
+  would be skipped, validation fails because that identity no longer has a
+  usable gallery sample.
+
+Click **Validate Dataset** before running. Validation checks the folder layout,
+Auto Split rules, gallery/probe availability, generated positive and negative
+pairs for 1:1, required gallery coverage for 1:N, and the selected multi-face
+policy. **Run Evaluation** is enabled only after validation passes.
+
+1:1 reports include best cosine threshold accuracy, the threshold at that
+operating point, and TAR@FAR for `1e-6`, `1e-5`, `1e-4`, and `1e-3`. 1:N
+reports include Top1 plus TAR@FAR for `1e-5`, `1e-4`, `1e-3`, and `1e-2`,
+including the corresponding thresholds.
 
 ## Report Export
 

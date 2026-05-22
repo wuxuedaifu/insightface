@@ -6,7 +6,7 @@ import inspect
 from pathlib import Path
 from typing import Callable
 
-from PySide6.QtCore import QObject, QRunnable, Qt, QThreadPool, QTimer, QUrl, Signal, Slot
+from PySide6.QtCore import QObject, QRunnable, QSize, Qt, QThreadPool, QTimer, QUrl, Signal, Slot
 from PySide6.QtGui import QAction, QDesktopServices, QFontMetrics, QKeySequence
 from PySide6.QtWidgets import (
     QApplication,
@@ -23,7 +23,6 @@ from PySide6.QtWidgets import (
     QMainWindow,
     QMessageBox,
     QPushButton,
-    QSizePolicy,
     QStackedWidget,
     QStatusBar,
     QVBoxLayout,
@@ -33,9 +32,9 @@ from PySide6.QtWidgets import (
 from .core.config import save_config
 from .core.constants import LOCAL_PROCESSING_NOTICE, RESPONSIBLE_USE_NOTICE, WINDOW_TITLE
 from .core.face_engine import is_cuda_provider_available
+from .core.i18n import apply_translations, tr
 from .core.navigation import (
     AppMode,
-    MODE_LABELS,
     NAVIGATION_MODES,
     last_page_attr,
     mode_from_value,
@@ -46,6 +45,8 @@ from .dialogs.license_dialog import LicenseDialog
 from .dialogs.model_manager_dialog import ModelManagerDialog
 from .dialogs.settings_dialog import SettingsDialog
 from .page_registry import PageRegistry
+from .pages.license_center_page import ENTERPRISE_HELP_URL
+from .resources import app_icon
 from .widgets.progress_dialog import StudioProgressDialog
 
 
@@ -111,7 +112,9 @@ class FirstLaunchWizard(QDialog):
         workspace_layout.addWidget(self.workspace)
         workspace_layout.addWidget(browse)
         self.mode = QComboBox()
-        self.mode.addItems(["Personal / Research", "Enterprise Evaluation"])
+        self.mode.setProperty("i18nItems", True)
+        self.mode.addItem("Personal / Research", "Personal / Research")
+        self.mode.addItem("Enterprise Evaluation", "Enterprise Evaluation")
         self.model = QComboBox()
         self.model.addItems(["buffalo_l", "buffalo_s", "antelopev2", "custom model directory"])
         self.provider = QComboBox()
@@ -142,10 +145,10 @@ class FirstLaunchWizard(QDialog):
 
     def accept(self) -> None:
         self.config.workspace_path = self.workspace.text().strip()
-        self.config.mode = self.mode.currentText()
+        self.config.mode = str(self.mode.currentData() or self.mode.currentText())
         self.config.ui_last_mode = (
             AppMode.ENTERPRISE_EVALUATION.value
-            if self.mode.currentText() == "Enterprise Evaluation"
+            if self.config.mode == "Enterprise Evaluation"
             else AppMode.FACE_VERIFICATION.value
         )
         selected_model = self.model.currentText()
@@ -200,6 +203,9 @@ class MainWindow(QMainWindow):
         self.context = context
         self.apply_theme()
         self.setWindowTitle(WINDOW_TITLE)
+        icon = app_icon()
+        if icon is not None and not icon.isNull():
+            self.setWindowIcon(icon)
         self.resize(int(context.config.ui_window_width), int(context.config.ui_window_height))
         self.thread_pool = QThreadPool.globalInstance()
         self.active_workers: set[Worker] = set()
@@ -209,6 +215,15 @@ class MainWindow(QMainWindow):
         self.current_page_key = ""
 
         self.stack = QStackedWidget()
+        self.mode_rail = QWidget()
+        self.mode_rail.setObjectName("modeRail")
+        self.mode_rail.setFixedWidth(230)
+        self.mode_list = QListWidget()
+        self.mode_list.setObjectName("modeList")
+        self.mode_list.setAlternatingRowColors(False)
+        self.mode_list.setWordWrap(True)
+        self.mode_list.setSpacing(2)
+        self.mode_list.itemClicked.connect(self._mode_list_clicked)
         self.sidebar = QWidget()
         self.sidebar.setObjectName("modeSidebar")
         self.sidebar.setFixedWidth(int(context.config.ui_sidebar_width or 240))
@@ -229,6 +244,7 @@ class MainWindow(QMainWindow):
         body = QWidget()
         body_layout = QHBoxLayout(body)
         body_layout.setContentsMargins(0, 0, 0, 0)
+        body_layout.addWidget(self._build_mode_rail())
         sidebar_layout = QVBoxLayout(self.sidebar)
         sidebar_layout.setContentsMargins(14, 14, 10, 14)
         sidebar_layout.addWidget(self.sidebar_title)
@@ -243,6 +259,7 @@ class MainWindow(QMainWindow):
         self._build_statusbar()
         apply_button_tooltips(self)
         self.change_mode(self.current_mode, restore_last=True, save=False)
+        self.apply_language()
         self.refresh_statusbar()
         if not self.context.config_exists:
             QTimer.singleShot(100, self.show_first_launch)
@@ -258,12 +275,6 @@ class MainWindow(QMainWindow):
         title.setStyleSheet("font-size:18px; font-weight:700; border:0;")
         version = QLabel("v1.0")
         version.setProperty("role", "muted")
-        self.mode_combo = QComboBox()
-        self.mode_combo.setMinimumWidth(250)
-        self.mode_combo.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
-        for mode in NAVIGATION_MODES.values():
-            self.mode_combo.addItem(mode.title, mode.id.value)
-        self.mode_combo.currentIndexChanged.connect(self._mode_combo_changed)
         self.model_chip = QLabel()
         self.provider_chip = QLabel()
         self.license_chip = QLabel()
@@ -271,9 +282,6 @@ class MainWindow(QMainWindow):
             chip.setProperty("role", "statusChip")
         layout.addWidget(title)
         layout.addWidget(version)
-        layout.addSpacing(18)
-        layout.addWidget(QLabel("Mode"))
-        layout.addWidget(self.mode_combo)
         layout.addStretch(1)
         layout.addWidget(self.model_chip)
         layout.addWidget(self.provider_chip)
@@ -288,6 +296,47 @@ class MainWindow(QMainWindow):
         button.clicked.connect(callback)
         set_button_tooltip(button)
         return button
+
+    def _build_mode_rail(self) -> QWidget:
+        layout = QVBoxLayout(self.mode_rail)
+        layout.setContentsMargins(14, 14, 12, 14)
+        layout.setSpacing(8)
+        title = QLabel("Workflows")
+        title.setObjectName("modeRailTitle")
+        title.setStyleSheet("font-size:14px; font-weight:700; border:0;")
+        description = QLabel("Choose the workspace for the task.")
+        description.setProperty("role", "muted")
+        description.setWordWrap(True)
+        layout.addWidget(title)
+        layout.addWidget(description)
+        for mode in NAVIGATION_MODES.values():
+            item = QListWidgetItem(f"{mode.title}\n{self._mode_subtitle(mode.id)}")
+            item.setData(Qt.UserRole, mode.id.value)
+            item.setToolTip(mode.description)
+            item.setSizeHint(QSize(190, 58))
+            self.mode_list.addItem(item)
+        layout.addWidget(self.mode_list, 1)
+        enterprise_help = QPushButton("Enterprise Help")
+        enterprise_help.setObjectName("enterpriseHelpButton")
+        enterprise_help.setToolTip(
+            "Open the InsightFace contact page for enterprise evaluation, licensing, SDK/API, SLA, or custom training help."
+        )
+        enterprise_help.clicked.connect(self.open_enterprise_help)
+        layout.addWidget(enterprise_help)
+        local_notice = QLabel("All processing is local. No images, embeddings, or reports are uploaded automatically.")
+        local_notice.setObjectName("localProcessingNotice")
+        local_notice.setWordWrap(True)
+        layout.addWidget(local_notice)
+        return self.mode_rail
+
+    def _mode_subtitle(self, mode: AppMode) -> str:
+        subtitles = {
+            AppMode.FACE_VERIFICATION: "Query and gallery recognition",
+            AppMode.ALBUM_MANAGEMENT: "Photo clustering and review",
+            AppMode.FACE_SWAP: "Source + Target = Result",
+            AppMode.ENTERPRISE_EVALUATION: "Datasets, metrics, and reports",
+        }
+        return tr(subtitles[mode], self.context.config.ui_language)
 
     def _build_menu(self) -> None:
         file_menu = self.menuBar().addMenu("File")
@@ -318,9 +367,21 @@ class MainWindow(QMainWindow):
 
         help_menu = self.menuBar().addMenu("Help")
         about_action = help_menu.addAction("About")
-        about_action.triggered.connect(lambda: QMessageBox.information(self, "About", "InsightFace Evaluation Studio v1.0"))
+        about_action.triggered.connect(
+            lambda: QMessageBox.information(
+                self,
+                tr("About", self.context.config.ui_language),
+                "InsightFace Evaluation Studio v1.0",
+            )
+        )
         responsible_action = help_menu.addAction("Responsible Use Notice")
-        responsible_action.triggered.connect(lambda: QMessageBox.information(self, "Responsible Use Notice", RESPONSIBLE_USE_NOTICE))
+        responsible_action.triggered.connect(
+            lambda: QMessageBox.information(
+                self,
+                tr("Responsible Use Notice", self.context.config.ui_language),
+                tr(RESPONSIBLE_USE_NOTICE, self.context.config.ui_language),
+            )
+        )
 
     def _build_statusbar(self) -> None:
         self.status = QStatusBar()
@@ -335,18 +396,14 @@ class MainWindow(QMainWindow):
         for label in self.status_labels.values():
             self.status.addPermanentWidget(label)
 
-    def _mode_combo_changed(self) -> None:
-        mode = mode_from_value(self.mode_combo.currentData())
+    def _mode_list_clicked(self, item: QListWidgetItem) -> None:
+        mode = mode_from_value(item.data(Qt.UserRole))
         if mode != self.current_mode:
             self.change_mode(mode)
 
     def change_mode(self, mode: AppMode | str, restore_last: bool = True, save: bool = True) -> None:
         self.current_mode = mode_from_value(mode)
-        index = self.mode_combo.findData(self.current_mode.value)
-        if index >= 0 and self.mode_combo.currentIndex() != index:
-            self.mode_combo.blockSignals(True)
-            self.mode_combo.setCurrentIndex(index)
-            self.mode_combo.blockSignals(False)
+        self._sync_mode_list_selection()
         self._rebuild_sidebar()
         page_key = getattr(self.context.config, last_page_attr(self.current_mode), "") if restore_last else ""
         valid_keys = {item.page_key for item in NAVIGATION_MODES[self.current_mode].items}
@@ -357,17 +414,28 @@ class MainWindow(QMainWindow):
             save_config(self.context.config)
         self.open_page(page_key, from_mode_change=True)
 
+    def _sync_mode_list_selection(self) -> None:
+        for row in range(self.mode_list.count()):
+            item = self.mode_list.item(row)
+            if item.data(Qt.UserRole) == self.current_mode.value:
+                self.mode_list.blockSignals(True)
+                self.mode_list.setCurrentItem(item)
+                self.mode_list.blockSignals(False)
+                break
+
     def _rebuild_sidebar(self) -> None:
         mode = NAVIGATION_MODES[self.current_mode]
-        self.sidebar_title.setText(mode.title)
-        self.sidebar_description.setText(mode.description)
-        self.sidebar.setVisible(self.current_mode not in {AppMode.FACE_VERIFICATION, AppMode.ALBUM_MANAGEMENT, AppMode.FACE_SWAP})
+        self.sidebar_title.setText(tr(mode.title, self.context.config.ui_language))
+        self.sidebar_description.setText(tr(mode.description, self.context.config.ui_language))
+        self.sidebar.setVisible(False)
         self.sidebar_list.clear()
         for nav_item in mode.items:
-            title = nav_item.title + ("  Coming soon" if nav_item.coming_soon else "")
+            title = tr(nav_item.title, self.context.config.ui_language) + (
+                "  " + tr("Coming soon", self.context.config.ui_language) if nav_item.coming_soon else ""
+            )
             item = QListWidgetItem(title)
             item.setData(Qt.UserRole, nav_item.page_key)
-            item.setToolTip(nav_item.description)
+            item.setToolTip(tr(nav_item.description, self.context.config.ui_language))
             if not nav_item.enabled:
                 item.setFlags(item.flags() & ~Qt.ItemIsEnabled)
                 item.setForeground(Qt.gray)
@@ -393,6 +461,7 @@ class MainWindow(QMainWindow):
         apply_button_tooltips(page)
         if hasattr(page, "refresh"):
             page.refresh()
+        apply_translations(page, self.context.config.ui_language)
         self.stack.setCurrentWidget(page)
         self.current_page_key = page_key
         for row in range(self.sidebar_list.count()):
@@ -409,11 +478,12 @@ class MainWindow(QMainWindow):
         for mode in NAVIGATION_MODES.values():
             for item in mode.items:
                 if item.page_key == page_key:
-                    return item.title
+                    return tr(item.title, self.context.config.ui_language)
         return page_key
 
     def show_first_launch(self) -> None:
         wizard = FirstLaunchWizard(self.context.config, self)
+        apply_translations(wizard, self.context.config.ui_language)
         if wizard.exec() == QDialog.Accepted:
             self.context.storage = self.context.storage.__class__(self.context.config.database_path)
             self.change_mode(mode_from_value(self.context.config.ui_last_mode), restore_last=False)
@@ -436,12 +506,14 @@ class MainWindow(QMainWindow):
     def open_settings_dialog(self) -> None:
         dialog = SettingsDialog(self.context, self)
         apply_button_tooltips(dialog)
+        apply_translations(dialog, self.context.config.ui_language)
         dialog.settingsSaved.connect(self._settings_saved)
         dialog.exec()
         self.refresh_statusbar()
 
     def _settings_saved(self) -> None:
         self.apply_theme()
+        self.apply_language()
         self.refresh_statusbar()
 
     def apply_theme(self) -> None:
@@ -449,40 +521,61 @@ class MainWindow(QMainWindow):
         if qt_app is not None:
             qt_app.setStyleSheet(application_stylesheet(self.context.config.ui_theme))
 
+    def apply_language(self) -> None:
+        self._refresh_mode_list_texts()
+        self._rebuild_sidebar()
+        apply_translations(self, self.context.config.ui_language)
+        self.refresh_statusbar()
+
+    def _refresh_mode_list_texts(self) -> None:
+        for row, mode in enumerate(NAVIGATION_MODES.values()):
+            item = self.mode_list.item(row)
+            if item is None:
+                continue
+            item.setText(f"{tr(mode.title, self.context.config.ui_language)}\n{self._mode_subtitle(mode.id)}")
+            item.setToolTip(tr(mode.description, self.context.config.ui_language))
+
     def open_model_manager(self, initial: str | None = None) -> None:
         dialog = ModelManagerDialog(self.context, self)
         apply_button_tooltips(dialog)
+        apply_translations(dialog, self.context.config.ui_language)
         dialog.modelChanged.connect(self.refresh_statusbar)
         if initial:
             dialog.open_page(initial)
+            apply_translations(dialog, self.context.config.ui_language)
         dialog.exec()
         self.refresh_statusbar()
 
     def open_license_dialog(self) -> None:
         dialog = LicenseDialog(self.context, self)
         apply_button_tooltips(dialog)
+        apply_translations(dialog, self.context.config.ui_language)
         dialog.exec()
         self.refresh_statusbar()
 
+    def open_enterprise_help(self) -> None:
+        QDesktopServices.openUrl(QUrl(ENTERPRISE_HELP_URL))
+        self.set_status("Opened InsightFace enterprise contact page.")
+
     def set_status(self, message: str) -> None:
-        self.status_labels["running"].setText(self._elide(message, 180))
+        self.status_labels["running"].setText(self._elide(tr(message, self.context.config.ui_language), 180))
 
     def refresh_statusbar(self) -> None:
         cfg = self.context.config
         self.model_chip.setVisible(cfg.ui_show_status_chips)
         self.provider_chip.setVisible(cfg.ui_show_status_chips)
         self.license_chip.setVisible(cfg.ui_show_status_chips)
-        self.model_chip.setText(self._elide(f"Model: {cfg.model_name}", 150))
-        self.provider_chip.setText(self._elide(f"Provider: {cfg.provider}", 130))
-        self.license_chip.setText(self._elide(cfg.license_status, 180))
+        self.model_chip.setText(self._elide(f"{tr('Model', cfg.ui_language)}: {cfg.model_name}", 150))
+        self.provider_chip.setText(self._elide(f"{tr('Provider', cfg.ui_language)}: {cfg.provider}", 130))
+        self.license_chip.setText(self._elide(tr(cfg.license_status, cfg.ui_language), 180))
         self.model_chip.setToolTip(cfg.model_name)
         self.provider_chip.setToolTip(cfg.provider)
         self.license_chip.setToolTip(cfg.license_status)
-        self.status_labels["model"].setText(self._elide(f"Model: {cfg.model_name}", 160))
-        self.status_labels["provider"].setText(f"Provider: {cfg.provider}")
-        self.status_labels["database"].setText(self._elide(f"DB: {cfg.database_path}", 280))
+        self.status_labels["model"].setText(self._elide(f"{tr('Model', cfg.ui_language)}: {cfg.model_name}", 160))
+        self.status_labels["provider"].setText(f"{tr('Provider', cfg.ui_language)}: {cfg.provider}")
+        self.status_labels["database"].setText(self._elide(f"{tr('DB', cfg.ui_language)}: {cfg.database_path}", 280))
         self.status_labels["database"].setToolTip(cfg.database_path)
-        self.status_labels["license"].setText(self._elide(f"License: {cfg.license_status}", 220))
+        self.status_labels["license"].setText(self._elide(f"{tr('License', cfg.ui_language)}: {tr(cfg.license_status, cfg.ui_language)}", 220))
 
     def run_task(self, title: str, fn: Callable, on_result: Callable | None = None, show_dialog: bool = True) -> None:
         worker = Worker(fn)
@@ -494,7 +587,13 @@ class MainWindow(QMainWindow):
             worker.signals.progress.connect(dialog.update_progress)
             dialog.show()
         worker.signals.result.connect(lambda result: on_result(result) if on_result else None)
-        worker.signals.error.connect(lambda message: QMessageBox.warning(self, title, message))
+        worker.signals.error.connect(
+            lambda message: QMessageBox.warning(
+                self,
+                tr(title, self.context.config.ui_language),
+                tr(message, self.context.config.ui_language),
+            )
+        )
         worker.signals.error.connect(self.set_status)
         worker.signals.finished.connect(lambda: dialog.close() if dialog else None)
         worker.signals.finished.connect(self.refresh_statusbar)

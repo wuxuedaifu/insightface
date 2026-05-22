@@ -12,6 +12,7 @@ from PySide6.QtGui import QCursor, QDesktopServices, QIcon, QImage, QPixmap
 from PySide6.QtWidgets import (
     QAbstractItemView,
     QFileDialog,
+    QDoubleSpinBox,
     QHBoxLayout,
     QLabel,
     QListWidget,
@@ -25,8 +26,8 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from ..core.clustering import cluster_embeddings_hdbscan_auto, hdbscan_status
-from ..core.constants import DEFAULT_THRESHOLD
+from ..core.clustering import cluster_embeddings_dbscan
+from ..core.i18n import tr
 from ..core.recognition import cosine_similarity, normalize_embedding
 from ..core.tooltips import set_button_tooltip
 from ..core.utils import crop_bbox, encode_webp_thumbnail, list_images, read_image, timestamp_for_filename
@@ -34,7 +35,7 @@ from ..widgets.table_utils import configure_table_columns, refresh_table_columns
 from .base import BasePage
 
 DEFAULT_ALBUM_MIN_FACE_SIZE = 80
-DEFAULT_ALBUM_DUPLICATE_DISTANCE = DEFAULT_THRESHOLD
+DEFAULT_ALBUM_COSINE_THRESHOLD = 0.48
 
 
 class AlbumDirectoryList(QListWidget):
@@ -149,7 +150,7 @@ class AlbumPage(BasePage):
         self.content.addWidget(
             self.notice(
                 "All album processing is local. Import / Refresh scans every selected folder, extracts features "
-                "only for new images, then runs a complete automatic HDBSCAN clustering pass over indexed faces."
+                "only for new images, then runs DBSCAN clustering over all indexed faces using the selected cosine threshold."
             )
         )
         self.folder_list = AlbumDirectoryList()
@@ -174,29 +175,45 @@ class AlbumPage(BasePage):
         button_row.addStretch(1)
         controls_layout.addLayout(button_row)
 
+        threshold_help = QLabel(
+            "Cosine threshold is a face similarity cutoff: higher values make clusters stricter. "
+            "DBSCAN internally uses cosine distance = 1 - cosine threshold."
+        )
+        threshold_help.setObjectName("albumThresholdHelp")
+        threshold_help.setProperty("role", "muted")
+        threshold_help.setWordWrap(True)
+        controls_layout.addWidget(threshold_help)
+
         settings_row = QHBoxLayout()
-        self.min_cluster_size = QSpinBox()
-        self.min_cluster_size.setRange(2, 50)
-        self.min_cluster_size.setValue(2)
+        self.cluster_threshold = QDoubleSpinBox()
+        self.cluster_threshold.setRange(0.01, 0.99)
+        self.cluster_threshold.setSingleStep(0.01)
+        self.cluster_threshold.setDecimals(2)
+        self.cluster_threshold.setValue(DEFAULT_ALBUM_COSINE_THRESHOLD)
+        self.cluster_threshold.setToolTip(
+            "Cosine similarity threshold. Higher values make clusters stricter; default is 0.48."
+        )
+        self.min_samples = QSpinBox()
+        self.min_samples.setRange(1, 50)
+        self.min_samples.setValue(2)
+        self.min_samples.setToolTip("Minimum neighboring faces needed for a DBSCAN core point.")
         self.min_face_size = QSpinBox()
         self.min_face_size.setRange(1, 4096)
         self.min_face_size.setValue(DEFAULT_ALBUM_MIN_FACE_SIZE)
         self.min_face_size.setToolTip(
             "Faces whose bounding box width or height is smaller than this value are skipped."
         )
-        self.algorithm_label = QLabel("Algorithm: HDBSCAN (auto)")
-        settings_row.addWidget(QLabel("HDBSCAN min cluster size"))
-        settings_row.addWidget(self.min_cluster_size)
+        self.algorithm_label = QLabel("Algorithm: DBSCAN")
+        settings_row.addWidget(QLabel("Cosine threshold"))
+        settings_row.addWidget(self.cluster_threshold)
+        settings_row.addWidget(QLabel("Min samples"))
+        settings_row.addWidget(self.min_samples)
         settings_row.addWidget(QLabel("Minimum face size"))
         settings_row.addWidget(self.min_face_size)
         settings_row.addWidget(self.algorithm_label)
         settings_row.addStretch(1)
         controls_layout.addLayout(settings_row)
-        self.hdbscan_notice = self.notice("")
-        self.hdbscan_notice.hide()
-        controls_layout.addWidget(self.hdbscan_notice)
         self.content.addWidget(controls)
-        self._update_hdbscan_availability()
 
         splitter = QSplitter(Qt.Horizontal)
         self.cluster_table = QTableWidget(0, 2)
@@ -229,7 +246,11 @@ class AlbumPage(BasePage):
         return button
 
     def add_folder(self) -> None:
-        folder = QFileDialog.getExistingDirectory(self, "Select album folder", str(Path.home()))
+        folder = QFileDialog.getExistingDirectory(
+            self,
+            tr("Select album folder", self.context.config.ui_language),
+            str(Path.home()),
+        )
         if folder:
             self.folder_list.add_folder(folder)
 
@@ -244,19 +265,18 @@ class AlbumPage(BasePage):
         self.set_status("Album directories cleared. Existing clustering results are still available.")
 
     def import_refresh(self) -> None:
-        if not self._require_hdbscan():
-            return
         self._run_import_refresh(rebuild=False)
 
     def rebuild_all(self) -> None:
-        if not self._require_hdbscan():
-            return
         folders = [Path(folder) for folder in self.folder_list.folders()]
         if not folders:
             reply = QMessageBox.question(
                 self,
-                "Rebuild All",
-                "No album directories are selected. Rebuild All will clear saved album clustering results. Continue?",
+                tr("Rebuild All", self.context.config.ui_language),
+                tr(
+                    "No album directories are selected. Rebuild All will clear saved album clustering results. Continue?",
+                    self.context.config.ui_language,
+                ),
                 QMessageBox.Yes | QMessageBox.No,
                 QMessageBox.No,
             )
@@ -269,8 +289,11 @@ class AlbumPage(BasePage):
             return
         reply = QMessageBox.question(
             self,
-            "Rebuild All",
-            "Rebuild All will reprocess every image in the selected album directories and replace saved clustering results. Continue?",
+            tr("Rebuild All", self.context.config.ui_language),
+            tr(
+                "Rebuild All will reprocess every image in the selected album directories and replace saved clustering results. Continue?",
+                self.context.config.ui_language,
+            ),
             QMessageBox.Yes | QMessageBox.No,
             QMessageBox.No,
         )
@@ -278,8 +301,6 @@ class AlbumPage(BasePage):
             self._run_import_refresh(rebuild=True)
 
     def _run_import_refresh(self, rebuild: bool = False) -> None:
-        if not self._require_hdbscan():
-            return
         folders = [Path(folder) for folder in self.folder_list.folders()]
         if not folders:
             self.show_error("Add one or more album directories first.")
@@ -294,7 +315,8 @@ class AlbumPage(BasePage):
         if not all_paths:
             self.show_error("No supported images found in the selected directories.")
             return
-        min_cluster_size = int(self.min_cluster_size.value())
+        cosine_threshold = float(self.cluster_threshold.value())
+        min_samples = int(self.min_samples.value())
         min_face_size = int(self.min_face_size.value())
         existing = set() if rebuild else self.context.storage.existing_media_paths(all_paths)
         new_paths = list(all_paths) if rebuild else [path for path in all_paths if path not in existing]
@@ -349,14 +371,13 @@ class AlbumPage(BasePage):
                         f"Imported {imported} new images, saved {faces_saved} faces",
                     )
             faces = self._faces_for_folders(folders, min_face_size)
-            clusters, algorithm = self._cluster_faces(faces, min_cluster_size)
+            clusters, algorithm = self._cluster_faces(faces, cosine_threshold, min_samples)
             self.context.storage.save_album_results(
                 clusters,
                 self.cluster_items,
                 algorithm,
-                cluster_threshold=None,
-                duplicate_threshold=DEFAULT_ALBUM_DUPLICATE_DISTANCE,
-                min_samples=min_cluster_size,
+                cluster_threshold=cosine_threshold,
+                min_samples=min_samples,
                 min_face_size=min_face_size,
             )
             return {
@@ -404,12 +425,15 @@ class AlbumPage(BasePage):
     def _cluster_faces(
         self,
         faces: list[dict],
-        min_cluster_size: int,
+        cosine_threshold: float,
+        min_samples: int,
     ) -> tuple[list[dict], str]:
         embeddings = [face["embedding"] for face in faces]
-        labels, algorithm = cluster_embeddings_hdbscan_auto(
+        distance_threshold = max(0.01, 1.0 - float(cosine_threshold))
+        labels, algorithm = cluster_embeddings_dbscan(
             embeddings,
-            min_cluster_size=min_cluster_size,
+            distance_threshold=distance_threshold,
+            min_samples=min_samples,
         )
         groups: dict[int, list[dict]] = defaultdict(list)
         next_noise = max(labels, default=-1) + 1
@@ -418,11 +442,7 @@ class AlbumPage(BasePage):
                 label = next_noise
                 next_noise += 1
             groups[int(label)].append(face)
-        existing_people = self.context.storage.list_people()
-        max_existing_id = max([int(person["id"]) for person in existing_people], default=0)
-        gallery = self.context.storage.load_all_gallery_embeddings()
-        next_album_id = max_existing_id + 1
-        used_ids = {int(person["id"]) for person in existing_people}
+        next_album_id = 1
         clusters = []
         self.cluster_items = {}
         for label, items in groups.items():
@@ -431,37 +451,16 @@ class AlbumPage(BasePage):
             if not vectors:
                 continue
             centroid = normalize_embedding(np.mean(np.vstack(vectors), axis=0))
-            best_person_id = None
-            best_person_name = ""
-            best_score = -1.0
-            for sample in gallery:
-                score = cosine_similarity(centroid, sample.get("embedding"))
-                if score > best_score:
-                    best_score = score
-                    best_person_id = sample.get("person_id")
-                    best_person_name = sample.get("person_name") or ""
-            source = (
-                "existing"
-                if best_person_id is not None and (1.0 - best_score) <= DEFAULT_ALBUM_DUPLICATE_DISTANCE
-                else "album"
-            )
-            if source == "existing":
-                cluster_id = int(best_person_id)
-                name = best_person_name or f"Person {cluster_id}"
-            else:
-                while next_album_id in used_ids:
-                    next_album_id += 1
-                cluster_id = next_album_id
-                used_ids.add(cluster_id)
-                next_album_id += 1
-                name = f"Album Person {cluster_id}"
+            cluster_id = next_album_id
+            next_album_id += 1
+            name = f"Album Person {cluster_id}"
             representative = max(items, key=lambda item: cosine_similarity(centroid, item.get("embedding")))
             photos = sorted({item["media_path"] for item in items})
             cluster = {
                 "id": cluster_id,
                 "label": label,
                 "name": name,
-                "source": source,
+                "source": "album",
                 "face_count": len(items),
                 "photo_count": len(photos),
                 "avg_quality": sum(float(item.get("quality_score") or 0.0) for item in items) / max(1, len(items)),
@@ -477,7 +476,6 @@ class AlbumPage(BasePage):
         self.context.storage.save_album_directories(self.folder_list.folders())
 
     def refresh(self) -> None:
-        self._update_hdbscan_availability()
         if self._loaded_saved_state:
             return
         self._loaded_saved_state = True
@@ -488,30 +486,6 @@ class AlbumPage(BasePage):
                 self.folder_list.addItem(folder)
         self.folder_list.blockSignals(False)
         self._load_saved_results()
-
-    def _update_hdbscan_availability(self) -> bool:
-        available, message = hdbscan_status()
-        self.import_button.setEnabled(available)
-        self.rebuild_button.setEnabled(available)
-        if available:
-            self.algorithm_label.setText("Algorithm: HDBSCAN (auto)")
-            self.hdbscan_notice.hide()
-            self.import_button.setToolTip("Scan selected folders and run complete HDBSCAN clustering.")
-            self.rebuild_button.setToolTip("Clear indexed album features and rebuild with HDBSCAN.")
-        else:
-            self.algorithm_label.setText("Algorithm: HDBSCAN required")
-            self.hdbscan_notice.setText(message)
-            self.hdbscan_notice.show()
-            self.import_button.setToolTip(message)
-            self.rebuild_button.setToolTip(message)
-            self.set_status(message)
-        return available
-
-    def _require_hdbscan(self) -> bool:
-        available = self._update_hdbscan_availability()
-        if not available:
-            self.show_error(self.hdbscan_notice.text())
-        return available
 
     def _load_saved_results(self) -> None:
         data = self.context.storage.load_album_results()
@@ -529,9 +503,14 @@ class AlbumPage(BasePage):
             face_ids = [int(face_id) for face_id in cluster.get("face_ids", []) if str(face_id).isdigit()]
             self.cluster_items[cluster_id] = [faces_by_id[face_id] for face_id in face_ids if face_id in faces_by_id]
             self.clusters.append(cluster)
-        self.algorithm_label.setText(f"Algorithm: {data.get('algorithm', 'HDBSCAN')}")
+        algorithm = data.get("algorithm")
+        if algorithm not in {"DBSCAN", "centroid fallback", "none"}:
+            algorithm = "DBSCAN"
+        self.algorithm_label.setText(f"Algorithm: {algorithm}")
+        if data.get("cluster_threshold") is not None:
+            self.cluster_threshold.setValue(float(data["cluster_threshold"]))
         if data.get("min_samples") is not None:
-            self.min_cluster_size.setValue(int(data["min_samples"]))
+            self.min_samples.setValue(int(data["min_samples"]))
         if data.get("min_face_size") is not None:
             self.min_face_size.setValue(int(data["min_face_size"]))
         self._populate_clusters()

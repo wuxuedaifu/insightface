@@ -18,6 +18,7 @@ BUTTON_TOOLTIPS = {
     "Check Cameras": "Check available local camera devices.",
     "Clear": "Clear the current selection or form.",
     "Compare": "Run 1:1 face comparison for the selected images.",
+    "Contact Enterprise Support": "Open the InsightFace enterprise support contact page.",
     "Delete": "Delete the selected item.",
     "Delete Selected": "Delete the selected record.",
     "Download Selected": "Download the selected model package to the local model cache.",
@@ -73,6 +74,7 @@ BUTTON_TOOLTIPS = {
     "Stop": "Stop the current processing task.",
     "Test Model Load": "Test loading the selected model and runtime provider.",
     "Use Selected Model": "Use the selected downloaded model package.",
+    "Visit Homepage": "Open the InsightFace homepage.",
     "Warmup": "Run a short model warmup to measure startup latency.",
     "×": "Remove the current file.",
 }

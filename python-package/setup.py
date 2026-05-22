@@ -78,6 +78,7 @@ face3d_requirements = [
 package_data = {
     "insightface.data.images": ["*.jpg", "*.jpeg", "*.png"],
     "insightface.data.objects": ["*.pkl"],
+    "insightface.gui.assets": ["*.svg", "*.png", "*.ico", "*.icns"],
 }
 
 packages = find_namespace_packages(

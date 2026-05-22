@@ -7,7 +7,7 @@ import numpy as np
 def test_main_window_smoke(tmp_path):
     os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
     PySide6 = pytest.importorskip("PySide6")
-    from PySide6.QtCore import Qt
+    from PySide6.QtCore import QUrl, Qt
     from PySide6.QtWidgets import QAbstractItemView, QApplication, QLabel, QPushButton
 
     from insightface.gui.app import StudioContext, configure_qt_plugin_paths
@@ -19,9 +19,19 @@ def test_main_window_smoke(tmp_path):
     from insightface.gui.dialogs.model_manager_dialog import ModelManagerDialog
     from insightface.gui.dialogs.settings_dialog import SettingsDialog
     from insightface.gui.main_window import MainWindow
+    from insightface.gui.resources import APP_ID, APP_PROCESS_NAME, app_icon_path, configure_application_metadata
 
     configure_qt_plugin_paths()
     app = QApplication.instance() or QApplication([])
+    configure_application_metadata(app)
+    assert app.applicationName() == "InsightFace Evaluation Studio"
+    assert app.organizationName() == "InsightFace"
+    assert app.organizationDomain() == "insightface.ai"
+    assert app.applicationVersion() == "1.0"
+    assert APP_ID == "ai.insightface.evaluationstudio"
+    assert APP_PROCESS_NAME == "InsightFace Evaluation Studio"
+    assert app_icon_path().exists()
+    assert not app.windowIcon().isNull()
     cfg = AppConfig(
         workspace_path=str(tmp_path),
         model_root=str(tmp_path / "model-root"),
@@ -33,15 +43,29 @@ def test_main_window_smoke(tmp_path):
     engine = FaceEngine(model_name=cfg.model_name)
     window = MainWindow(StudioContext(cfg, True, storage, engine, str(tmp_path / "app.log")))
     window.show()
-    assert window.mode_combo.minimumWidth() >= 250
+    assert window.mode_rail.isVisible()
+    assert window.mode_rail.width() >= 220
+    assert window.mode_list.count() == len(AppMode)
+    assert window.mode_list.currentItem().data(Qt.UserRole) == AppMode.FACE_VERIFICATION.value
+    enterprise_help_button = window.findChild(QPushButton, "enterpriseHelpButton")
+    assert enterprise_help_button is not None
+    assert enterprise_help_button.text() == "Enterprise Help"
+    assert "contact page" in enterprise_help_button.toolTip()
+    local_notice = window.findChild(QLabel, "localProcessingNotice")
+    assert local_notice is not None
+    assert "All processing is local" in local_notice.text()
+    assert "No images, embeddings, or reports are uploaded automatically" in local_notice.text()
     window.open_page("verification")
     verification_page = window.page_registry.get("verification")
-    assert abs(window.context.config.recognition_threshold - 0.28) < 1e-9
-    assert abs(verification_page.threshold.value() - 0.28) < 1e-9
+    assert abs(window.context.config.recognition_threshold - 0.4) < 1e-9
+    assert abs(verification_page.threshold.value() - 0.4) < 1e-9
     notice = verification_page.findChild(QLabel, "noticeLabel")
     assert notice is not None
     assert "Gallery face embeddings are cached in memory" in notice.text()
     assert "All processing is local by default" not in notice.text()
+    assert verification_page.multi_face_policy.objectName() == "verificationMultiFacePolicy"
+    assert verification_page.multi_face_policy.currentText() == "Use largest centered face"
+    assert "largest centered face" in notice.text()
     assert hasattr(verification_page.result_table, "_proportional_table_sizer")
     assert verification_page.result_table.selectionBehavior() == QAbstractItemView.SelectRows
     assert verification_page.result_table.selectionMode() == QAbstractItemView.SingleSelection
@@ -50,6 +74,15 @@ def test_main_window_smoke(tmp_path):
     verification_page.set_gallery_paths(["new.jpg"])
     assert verification_page._gallery_embedding_cache_key is None
     assert verification_page._gallery_embedding_cache is None
+    verification_page._gallery_embedding_cache_key = ("use_largest_face", "new.jpg")
+    verification_page._gallery_embedding_cache = [{"path": "new.jpg"}]
+    verification_page.results = [{"path": "new.jpg"}]
+    verification_page.result_table.setRowCount(1)
+    verification_page.multi_face_policy.setCurrentText("Mark as skip")
+    assert verification_page._gallery_embedding_cache_key is None
+    assert verification_page._gallery_embedding_cache is None
+    assert verification_page.result_table.rowCount() == 0
+    assert "multi-face query stops" in notice.text()
     label_texts = [label.text() for label in verification_page.findChildren(QLabel)]
     assert "Mode: waiting for gallery" not in label_texts
     for button in verification_page.findChildren(QPushButton):
@@ -58,10 +91,14 @@ def test_main_window_smoke(tmp_path):
     assert face_swap_page.output_view.objectName() == "imageViewer"
     assert face_swap_page.output_view.viewport().objectName() == "imageViewerViewport"
     album_page = window.page_registry.get("album")
-    assert not hasattr(album_page, "cluster_threshold")
+    assert abs(album_page.cluster_threshold.value() - 0.48) < 1e-9
+    album_threshold_help = album_page.findChild(QLabel, "albumThresholdHelp")
+    assert album_threshold_help is not None
+    assert "cosine distance = 1 - cosine threshold" in album_threshold_help.text()
     assert not hasattr(album_page, "match_threshold")
+    assert album_page.min_samples.value() == 2
     assert album_page.min_face_size.value() == 80
-    assert album_page.algorithm_label.text().startswith("Algorithm: HDBSCAN")
+    assert album_page.algorithm_label.text().startswith("Algorithm: DBSCAN")
     assert hasattr(album_page, "import_button")
     assert hasattr(album_page, "rebuild_button")
     assert album_page.cluster_table.columnCount() == 2
@@ -79,13 +116,47 @@ def test_main_window_smoke(tmp_path):
     album_page._populate_clusters()
     assert album_page.cluster_table.item(0, 0).textAlignment() == Qt.AlignCenter
     assert album_page.cluster_table.item(0, 1).textAlignment() == Qt.AlignCenter
+    enterprise_page = window.page_registry.get("enterprise_evaluation")
+    enterprise_cards = enterprise_page.findChildren(PySide6.QtWidgets.QFrame, "enterpriseCard")
+    assert len(enterprise_cards) >= 3
+    assert enterprise_page.dataset_root.acceptDrops()
+    assert enterprise_page.dataset_drop_card.acceptDrops()
+    assert enterprise_page.mode_summary.acceptDrops()
+    class _Mime:
+        def hasUrls(self):
+            return True
+
+        def urls(self):
+            return [QUrl.fromLocalFile(str(tmp_path))]
+
+    class _Event:
+        def mimeData(self):
+            return _Mime()
+
+    assert enterprise_page._dataset_drop_path(_Event()) == str(tmp_path)
+    assert hasattr(enterprise_page, "help_button")
+    assert enterprise_page.help_button.text() == "Dataset Rules"
+    assert "Open Dataset Rules" in enterprise_page.mode_summary.text()
+    assert "Require exactly one face" in enterprise_page.mode_summary.text()
+    enterprise_page.auto_split.setChecked(False)
+    assert "Auto Split is off" in enterprise_page.mode_summary.text()
+    enterprise_page.eval_mode.setCurrentText("1:N Identification")
+    assert "gallery/<identity>" in enterprise_page.mode_summary.text()
+    enterprise_page.multi_face_policy.setCurrentText("Use largest centered face")
+    assert "Use largest centered face" in enterprise_page.mode_summary.text()
+    from insightface.gui.pages.enterprise_eval_page import DatasetRulesDialog
+
+    rules_dialog = DatasetRulesDialog(window)
+    assert rules_dialog.windowTitle() == "Evaluation Dataset Rules"
+    rules_dialog.close()
+    assert enterprise_page.output.minimumHeight() >= 260
     for mode in AppMode:
         window.change_mode(mode)
+        assert window.mode_rail.isVisible()
+        assert local_notice.isVisible()
+        assert window.mode_list.currentItem().data(Qt.UserRole) == mode.value
         assert window.sidebar_list.count() > 0
-        if mode in {AppMode.FACE_VERIFICATION, AppMode.ALBUM_MANAGEMENT, AppMode.FACE_SWAP}:
-            assert not window.sidebar.isVisible()
-        else:
-            assert window.sidebar.isVisible()
+        assert not window.sidebar.isVisible()
         sidebar_titles = [window.sidebar_list.item(i).text() for i in range(window.sidebar_list.count())]
         assert "Settings" not in sidebar_titles
         assert "Model Settings" not in sidebar_titles
@@ -94,6 +165,11 @@ def test_main_window_smoke(tmp_path):
     settings_dialog = SettingsDialog(window.context, window)
     assert hasattr(settings_dialog, "theme")
     assert settings_dialog.theme.count() >= 7
+    assert window.context.config.ui_theme == "azure_lab"
+    assert settings_dialog.theme.currentText() == "Azure Lab"
+    assert hasattr(settings_dialog, "language")
+    assert settings_dialog.language.findData("system") >= 0
+    assert settings_dialog.language.findData("zh") >= 0
     assert not hasattr(settings_dialog, "workspace")
     assert not hasattr(settings_dialog, "default_mode")
     model_dialog = ModelManagerDialog(window.context, window)
@@ -113,8 +189,49 @@ def test_main_window_smoke(tmp_path):
     gfpgan_path.write_bytes(b"fake")
     model_dialog.runtime_page.refresh()
     assert model_dialog.runtime_page.gfpgan_enabled.isEnabled()
-    dialogs = [settings_dialog, model_dialog, LicenseDialog(window.context, window)]
+    license_dialog = LicenseDialog(window.context, window)
+    license_buttons = [button.text() for button in license_dialog.findChildren(QPushButton)]
+    assert license_buttons == ["Visit Homepage", "Contact Enterprise Support"]
+    assert license_dialog.height() >= 660
+    assert license_dialog.page.table.minimumHeight() >= 260
+    assert license_dialog.page.findChild(QLabel, "noticeLabel") is None
+    from insightface.gui.pages.license_center_page import ENTERPRISE_HELP_URL, HOMEPAGE_URL
+
+    assert HOMEPAGE_URL == "https://www.insightface.ai"
+    assert ENTERPRISE_HELP_URL == "https://www.insightface.ai/contact"
+    dialogs = [settings_dialog, model_dialog, license_dialog]
     for dialog in dialogs:
         dialog.close()
-    window.close()
     assert window.windowTitle().startswith("InsightFace Evaluation Studio")
+    window.close()
+
+
+def test_album_clustering_does_not_match_people_library(tmp_path):
+    os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+    pytest.importorskip("PySide6")
+    from PySide6.QtWidgets import QApplication
+
+    from insightface.gui.app import StudioContext, configure_qt_plugin_paths
+    from insightface.gui.core.config import AppConfig
+    from insightface.gui.core.face_engine import FaceEngine
+    from insightface.gui.core.storage import Storage
+    from insightface.gui.pages.album_page import AlbumPage
+
+    configure_qt_plugin_paths()
+    QApplication.instance() or QApplication([])
+    cfg = AppConfig(workspace_path=str(tmp_path), auto_load_model=False, safe_mode=True)
+    storage = Storage(cfg.database_path)
+    existing_person_id = storage.add_person("Existing Person")
+    storage.add_person("Second Existing Person")
+    storage.add_face_sample(existing_person_id, np.array([1.0, 0.0], dtype=np.float32))
+    media_id = storage.add_media_item(str(tmp_path / "album.jpg"), "image")
+    face_id = storage.add_media_face(media_id, np.array([1.0, 0.0], dtype=np.float32))
+    face = storage.list_media_faces()[0]
+
+    page = AlbumPage(StudioContext(cfg, True, storage, FaceEngine(), str(tmp_path / "app.log")))
+    clusters, _algorithm = page._cluster_faces([face], cosine_threshold=0.48, min_samples=1)
+
+    assert clusters[0]["source"] == "album"
+    assert clusters[0]["id"] == 1
+    assert clusters[0]["name"] == "Album Person 1"
+    assert page.cluster_items[clusters[0]["id"]][0]["id"] == face_id

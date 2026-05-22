@@ -124,6 +124,13 @@ class DropInput(QFrame):
         else:
             event.ignore()
 
+    def dragMoveEvent(self, event) -> None:  # noqa: N802
+        if event.mimeData().hasUrls() and self._accepted_urls(event.mimeData().urls()):
+            self._set_property("dragActive", True)
+            event.acceptProposedAction()
+        else:
+            event.ignore()
+
     def dragLeaveEvent(self, event) -> None:  # noqa: N802
         self._set_property("dragActive", False)
         super().dragLeaveEvent(event)

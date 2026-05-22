@@ -5,6 +5,7 @@ from __future__ import annotations
 from PySide6.QtCore import Signal
 from PySide6.QtWidgets import QDialog, QLabel, QTabWidget, QVBoxLayout
 
+from ..core.i18n import tr
 from ..pages.model_download_page import ModelDownloadPage
 from ..pages.model_settings_page import ModelSettingsPage
 
@@ -39,7 +40,7 @@ class ModelManagerDialog(QDialog):
             self.runtime_page.refresh()
 
     def set_status(self, message: str) -> None:
-        self.status_label.setText(message)
+        self.status_label.setText(tr(message, self.context.config.ui_language))
         self.modelChanged.emit()
         if self.parent() is not None and hasattr(self.parent(), "set_status"):
             self.parent().set_status(message)

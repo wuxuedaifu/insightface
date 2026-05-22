@@ -18,6 +18,7 @@ from PySide6.QtWidgets import (
 )
 
 from ..core.tooltips import set_button_tooltip
+from ..core.i18n import tr
 from .image_viewer import ImageViewer
 
 
@@ -130,7 +131,12 @@ class UploadPreview(QFrame):
             self.pathChanged.emit("")
 
     def browse(self) -> None:
-        path, _ = QFileDialog.getOpenFileName(self, f"Select {self.title}", str(Path.home()), self.dialog_filter)
+        path, _ = QFileDialog.getOpenFileName(
+            self,
+            f"{tr('Select', self._language())} {tr(self.title, self._language())}",
+            str(Path.home()),
+            self.dialog_filter,
+        )
         if path:
             self.set_path(path)
 
@@ -194,14 +200,22 @@ class UploadPreview(QFrame):
             self.placeholder.hide()
         else:
             name = Path(self._path).name if self._path else self.title
-            self.placeholder.setText(f"{self.title}\n{name}\nDrop another file to replace it")
+            self.placeholder.setText(
+                f"{tr(self.title, self._language())}\n{name}\n{tr('Drop another file to replace it', self._language())}"
+            )
             self.placeholder.show()
         if self._path:
             self.file_label.setText(str(self._path))
             self.file_label.show()
 
     def _placeholder_text(self) -> str:
-        return f"{self.title}\n{self.prompt}"
+        language = self._language()
+        return f"{tr(self.title, language)}\n{tr(self.prompt, language)}"
+
+    def _language(self) -> str | None:
+        context = getattr(self.window(), "context", None)
+        config = getattr(context, "config", None)
+        return getattr(config, "ui_language", None)
 
     def _accepted_urls(self, urls) -> bool:
         return any(url.isLocalFile() and self._accepts_path(url.toLocalFile()) for url in urls)

@@ -4,6 +4,10 @@ from __future__ import annotations
 
 APP_NAME = "InsightFace Evaluation Studio"
 APP_VERSION = "1.0"
+APP_ORGANIZATION = "InsightFace"
+APP_DOMAIN = "insightface.ai"
+APP_ID = "ai.insightface.evaluationstudio"
+APP_PROCESS_NAME = APP_NAME
 WINDOW_TITLE = "InsightFace Evaluation Studio v1.0"
 SUBTITLE = (
     "Local face recognition, face search, photo organization, model evaluation, "
@@ -36,7 +40,7 @@ DEFAULT_MODEL_NAME = "buffalo_l"
 DEFAULT_PROVIDER = "Auto"
 DEFAULT_DET_SIZE = (0, 0)
 AUTO_DET_SIZES = ((128, 128), (640, 640))
-DEFAULT_THRESHOLD = 0.28
+DEFAULT_THRESHOLD = 0.4
 DEFAULT_TOP_K = 5
 DEFAULT_LICENSE_STATUS = "Research / Non-commercial"
 

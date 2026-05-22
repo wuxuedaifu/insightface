@@ -55,17 +55,16 @@ def test_album_directories_and_results_persist(tmp_path):
     storage.save_album_results(
         [cluster],
         {1: [{"id": face_id, "media_path": str(image_path)}]},
-        "HDBSCAN",
-        cluster_threshold=None,
-        duplicate_threshold=0.28,
+        "DBSCAN",
+        cluster_threshold=0.28,
         min_samples=2,
         min_face_size=80,
     )
 
     results = storage.load_album_results()
-    assert results["algorithm"] == "HDBSCAN"
-    assert results["cluster_threshold"] is None
-    assert results["duplicate_threshold"] == 0.28
+    assert results["algorithm"] == "DBSCAN"
+    assert results["cluster_threshold"] == 0.28
+    assert "duplicate_threshold" not in results
     assert results["min_face_size"] == 80
     assert results["clusters"][0]["thumbnail_face_id"] == face_id
     assert results["clusters"][0]["face_ids"] == [face_id]

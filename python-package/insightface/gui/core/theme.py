@@ -313,6 +313,10 @@ def application_stylesheet(theme: str | None) -> str:
         background: {palette["surface"]};
         border-bottom: 1px solid {palette["border"]};
     }}
+    QWidget#modeRail {{
+        background: {palette["surface"]};
+        border-right: 1px solid {palette["border"]};
+    }}
     QWidget#modeSidebar {{
         background: {palette["surface_alt"]};
         border-right: 1px solid {palette["border"]};
@@ -334,6 +338,19 @@ def application_stylesheet(theme: str | None) -> str:
         border-radius: 6px;
         color: {palette["text"]};
         padding: 9px 10px;
+    }}
+    QLabel#localProcessingNotice {{
+        background: {palette["notice_bg"]};
+        border: 1px solid {palette["notice_border"]};
+        border-radius: 8px;
+        color: {palette["muted"]};
+        padding: 9px 10px;
+        line-height: 1.25;
+    }}
+    QFrame#downloadSourceFooter {{
+        background: {palette["surface_alt"]};
+        border: 1px solid {palette["border"]};
+        border-radius: 6px;
     }}
     QPushButton {{
         background: {palette["button"]};
@@ -421,6 +438,22 @@ def application_stylesheet(theme: str | None) -> str:
     QListWidget::item:hover {{
         background: {palette["button_hover"]};
     }}
+    QListWidget#modeList::item {{
+        border-radius: 8px;
+        padding: 10px 10px;
+        margin: 3px 0;
+        color: {palette["muted"]};
+        border: 1px solid transparent;
+    }}
+    QListWidget#modeList::item:selected {{
+        background: {palette["accent_soft"]};
+        color: {palette["text"]};
+        border: 1px solid {palette["accent"]};
+    }}
+    QListWidget#modeList::item:hover {{
+        background: {palette["button_hover"]};
+        color: {palette["text"]};
+    }}
     QTableWidget, QTableView {{
         background: {palette["surface"]};
         alternate-background-color: {palette["table_alt"]};
@@ -456,6 +489,15 @@ def application_stylesheet(theme: str | None) -> str:
     QWidget#dashboardCard:hover {{
         border-color: {palette["accent"]};
         background: {palette["surface_alt"]};
+    }}
+    QFrame#enterpriseCard {{
+        border: 1px solid {palette["border"]};
+        border-radius: 6px;
+        background: {palette["surface"]};
+        padding: 10px;
+    }}
+    QLabel#enterpriseCardTitle {{
+        color: {palette["text"]};
     }}
     QFrame#uploadPreview, QFrame#dropInput, QFrame#galleryUpload,
     QFrame#imageOrFolderImport, QListWidget#albumDirectoryList {{

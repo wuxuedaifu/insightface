@@ -53,19 +53,27 @@ preview changes color on hover and during drag-over. Loaded previews show a
 small delete button and can be replaced by dragging in another file.
 
 The desktop app uses mode-based navigation. Choose **Face Recognition**,
-**Album Management**, **Face Swap**, or **Enterprise Evaluation** from the top
-app bar. Face Recognition is a single **Query & Gallery** workspace: upload
+**Album Management**, **Face Swap**, or **Enterprise Evaluation** from the
+persistent **Workflows** rail on the left side of the window. Face Recognition
+is a single **Query & Gallery** workspace: upload
 one query image and one gallery image for 1:1 compare, or upload multiple
 gallery images / a folder for 1:N gallery search. Album Management uses a
 single **Album** workspace for adding one or more folders, refreshing new
-images, DBSCAN clustering with a default threshold of `0.28`, and reviewing
-original photo thumbnails. Album directories and clustering results are saved
-locally for the next launch.
+images, DBSCAN clustering with a default cosine similarity threshold of `0.48`,
+and reviewing original photo thumbnails. Album directories and clustering results are saved
+locally for the next launch. Enterprise Evaluation is a single workspace for
+local 1:1 and 1:N identity-folder evaluation, Auto Split, metrics, and PDF
+report export. Enterprise datasets must pass validation before evaluation; the
+validator checks folder layout, gallery/probe rules, and the selected
+multi-face handling policy.
 Global utilities are available from the top bar and **Tools** menu:
-**Settings**, **Models**, and **License**. **Settings** currently controls the
-UI theme. Available themes include System, Precision Light, Studio Dark,
-Graphite Pro, Azure Lab, Emerald Focus, and Crimson Audit. Workspace paths are
-chosen on first launch and are not changed from the settings dialog.
+**Settings**, **Models**, and **License**. **Settings** controls the UI theme
+and language. Language defaults to the operating system when it is supported,
+otherwise English. Supported GUI languages are English, Chinese, Japanese,
+Korean, Spanish, French, German, Portuguese, and Russian. Available themes
+include System, Precision Light, Studio Dark, Graphite Pro, Azure Lab, Emerald
+Focus, and Crimson Audit. Workspace paths are chosen on first launch and are
+not changed from the settings dialog.
 
 Models are not downloaded automatically by the GUI. Open **Models > Downloads**,
 click **Refresh Download URLs** to read the latest GitHub Releases

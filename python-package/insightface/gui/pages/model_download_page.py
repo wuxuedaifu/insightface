@@ -6,10 +6,11 @@ from pathlib import Path
 
 from PySide6.QtCore import QUrl
 from PySide6.QtGui import QDesktopServices
-from PySide6.QtWidgets import QAbstractItemView, QLabel, QTableWidget, QTableWidgetItem
+from PySide6.QtWidgets import QAbstractItemView, QFrame, QLabel, QTableWidget, QTableWidgetItem, QVBoxLayout
 
 from ..core.config import save_config
 from ..core.constants import LICENSE_NOTICE
+from ..core.i18n import tr
 from ..core.model_downloads import (
     GITHUB_RELEASES_URL,
     ModelAsset,
@@ -57,9 +58,16 @@ class ModelDownloadPage(BasePage):
         configure_table_columns(self.table, [210, 100, 150, 130, 90, 170, 150, 360])
         self.table.setMinimumHeight(400)
         self.content.addWidget(self.table, 1)
+        self.content.addSpacing(8)
+        self.source_footer = QFrame()
+        self.source_footer.setObjectName("downloadSourceFooter")
+        footer_layout = QVBoxLayout(self.source_footer)
+        footer_layout.setContentsMargins(10, 8, 10, 8)
         self.url_label = QLabel()
         self.url_label.setWordWrap(True)
-        self.content.addWidget(self.url_label)
+        self.url_label.setProperty("role", "muted")
+        footer_layout.addWidget(self.url_label)
+        self.content.addWidget(self.source_footer)
         self.refresh()
 
     def refresh(self) -> None:
@@ -82,8 +90,10 @@ class ModelDownloadPage(BasePage):
             for col, value in enumerate(values):
                 self.table.setItem(row, col, QTableWidgetItem(str(value)))
         refresh_table_columns(self.table)
+        language = self.context.config.ui_language
         self.url_label.setText(
-            f"Refresh source: {GITHUB_RELEASES_URL}. Local model root: {Path(self.context.config.model_root).expanduser() / 'models'}"
+            f"{tr('Refresh source', language)}: {GITHUB_RELEASES_URL}\n"
+            f"{tr('Local model root', language)}: {Path(self.context.config.model_root).expanduser() / 'models'}"
         )
 
     def selected_asset(self) -> ModelAsset | None:

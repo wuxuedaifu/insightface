@@ -43,7 +43,8 @@ class AppConfig:
     batch_worker_count: int = 2
     video_frame_interval: int = 10
     camera_frame_skip: int = 3
-    ui_theme: str = "system"
+    ui_theme: str = "azure_lab"
+    ui_language: str = "system"
     ui_default_mode: str = "face_verification"
     ui_last_mode: str = "face_verification"
     ui_last_page_face_verification: str = "verification"
