@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import shutil
 from pathlib import Path
 
 from PySide6.QtCore import QEvent, Qt
@@ -11,11 +10,11 @@ from PySide6.QtWidgets import (
     QComboBox,
     QDialog,
     QDialogButtonBox,
-    QFileDialog,
     QFrame,
     QGridLayout,
     QHBoxLayout,
     QLabel,
+    QMessageBox,
     QTextEdit,
     QVBoxLayout,
     QWidget,
@@ -128,85 +127,720 @@ Report Outputs
 1:N reports include Top1, TAR@FAR, threshold recommendations, latency, and raw result examples.
 """
 
-DATASET_RULES_LOCAL_SUMMARY = {
-    "zh": """本页用于本地 1:1 验证和 1:N 识别评测。数据不会自动上传。
+DATASET_RULES_LOCAL_TEXT = {
+    "zh": """Enterprise Evaluation 页面支持从身份文件夹进行本地 1:1 验证和 1:N 识别评测。图片、特征和报告不会被自动上传。
 
-1:1 自动切分：每个身份文件夹选择一张 gallery 图，其余图片作为 probe，并执行 probe vs gallery 评测。
-1:1 非自动切分：每张图片都作为 probe，生成完整的两两比对。
+1:1 验证
 
-1:N 自动切分：可使用 identities/<身份文件夹> 或直接使用身份文件夹，每个身份必须能生成 gallery 和 probe。
-1:N 非自动切分：必须包含 gallery/<identity> 和 probe/<identity>；unknown/ 可选，用于提供 FAR 的冒名负样本。
+启用 Auto Split:
 
-核验会检查目录结构、gallery/probe 可用性、正负样本是否足够、图片可读取性，以及多人脸处理策略。""",
-    "ja": """このページでは、ローカルの 1:1 検証と 1:N 識別評価を実行します。データは自動アップロードされません。
+dataset_1v1/
+  0001__Alice/
+    gallery.jpg
+    img002.jpg
+    img003.jpg
+  0002__Bob/
+    img001.jpg
+    img002.jpg
 
-1:1 自動分割では、各IDから gallery 画像を1枚選び、残りを probe として probe vs gallery 評価を行います。
-1:1 自動分割なしでは、すべての画像を probe として総当たり比較を行います。
+每个子文件夹代表一个身份。文件名中包含 "gallery" 的图片会被选为该身份的 gallery image。如果不存在这样的文件，则选择排序后的第一张图片作为 gallery。其余图片作为 probe。评测会将每个 probe 与每个身份的 gallery 做比对，因此每个 trial 都是 probe vs gallery。
 
-1:N 自動分割では identities/<IDフォルダ> またはIDフォルダ直下を利用でき、各IDに gallery と probe が必要です。
-1:N 構造化形式では gallery/<identity> と probe/<identity> が必須で、unknown/ は FAR 用のインポスター負例として利用できます。
+关闭 Auto Split:
 
-検証では、フォルダ構造、gallery/probe、正負ペア、画像読み込み、複数顔処理ポリシーを確認します。""",
-    "ko": """이 페이지는 로컬 1:1 검증 및 1:N 식별 평가를 수행합니다. 데이터는 자동 업로드되지 않습니다.
+dataset_1v1/
+  0001__Alice/
+    img001.jpg
+    img002.jpg
+  0002__Bob/
+    img001.jpg
+    img002.jpg
 
-1:1 자동 분할은 각 ID에서 gallery 이미지 1장을 선택하고 나머지를 probe로 사용해 probe vs gallery 평가를 수행합니다.
-1:1 자동 분할 해제 시 모든 이미지를 probe로 보고 전체 쌍 비교를 생성합니다.
+每张图片都会被视为 probe。评测会在所有身份文件夹中的图片之间执行完整的 probe-vs-probe 两两比对。
 
-1:N 자동 분할은 identities/<ID 폴더> 또는 ID 폴더를 직접 사용할 수 있으며 각 ID에는 gallery와 probe가 필요합니다.
-1:N 구조화 형식은 gallery/<identity>와 probe/<identity>가 필수이며 unknown/은 FAR용 impostor 음성 샘플로 사용됩니다.
+1:N 识别
 
-검증 단계는 폴더 구조, gallery/probe 사용 가능 여부, 양/음성 샘플, 이미지 읽기, 다중 얼굴 처리 정책을 확인합니다.""",
-    "es": """Esta página ejecuta evaluaciones locales 1:1 y 1:N. Los datos no se suben automáticamente.
+启用 Auto Split:
 
-En 1:1 con división automática, se selecciona una imagen gallery por identidad y el resto se usa como probe para evaluar probe vs gallery.
-En 1:1 sin división automática, todas las imágenes son probes y se generan comparaciones por pares.
+dataset/
+  identities/
+    0001__Alice/
+      gallery.jpg
+      img002.jpg
+      img003.jpg
+    0002__Bob/
+      img001.jpg
+      img002.jpg
 
-En 1:N con división automática, puede usar identities/<carpetas de identidad> o carpetas de identidad directamente; cada identidad requiere gallery y probe.
-En 1:N estructurado, gallery/<identity> y probe/<identity> son obligatorios; unknown/ es opcional para negativos impostores de FAR.
+如果存在 identities/ 文件夹，会优先使用它。如果不存在，所选数据集根目录也可以直接包含身份文件夹。Gallery 选择规则与 1:1 的 Auto Split 相同。
 
-La validación comprueba estructura, disponibilidad de gallery/probe, muestras positivas/negativas, lectura de imágenes y política de varias caras.""",
-    "fr": """Cette page exécute des évaluations locales 1:1 et 1:N. Les données ne sont pas téléversées automatiquement.
+关闭 Auto Split:
 
-En 1:1 avec découpage automatique, une image gallery est choisie par identité et les autres servent de probe pour l’évaluation probe vs gallery.
-En 1:1 sans découpage automatique, toutes les images sont des probes et des comparaisons par paires sont générées.
+dataset_1n/
+  gallery/
+    0001__Alice/
+      enroll_001.jpg
+      enroll_002.jpg
+    0002__Bob/
+      enroll_001.jpg
+  probe/
+    0001__Alice/
+      test_001.jpg
+      test_002.jpg
+    0002__Bob/
+      test_001.jpg
+  unknown/
+    unknown_001.jpg
+    unknown_002.jpg
 
-En 1:N avec découpage automatique, utilisez identities/<dossiers d’identité> ou les dossiers d’identité directement ; chaque identité doit fournir gallery et probe.
-En 1:N structuré, gallery/<identity> et probe/<identity> sont obligatoires ; unknown/ est optionnel pour les négatifs imposteurs FAR.
+gallery/ 和 probe/ 是必需的。unknown/ 是可选的。1:N 评测始终需要 gallery 图片。
 
-La validation vérifie la structure, gallery/probe, les échantillons positifs/négatifs, la lecture des images et la politique multi-visage.""",
-    "de": """Diese Seite führt lokale 1:1- und 1:N-Evaluierungen aus. Daten werden nicht automatisch hochgeladen.
+核验内容
 
-Bei 1:1 mit automatischer Aufteilung wird pro Identität ein gallery-Bild gewählt; die übrigen Bilder dienen als probe für probe-vs-gallery.
-Bei 1:1 ohne automatische Aufteilung werden alle Bilder als probe behandelt und paarweise verglichen.
+- 所选根目录存在，并且与当前评测模式匹配。
+- 必需的 gallery 和 probe 文件夹/图片存在。
+- Auto Split 能生成有效的 gallery/probe 集合。
+- 1:1 能生成正样本对和负样本对。
+- 1:N 的 probe 身份有对应的有效 gallery。
+- 每张需要核验的图片都可以读取。
+- 检测到的人脸数量符合所选多人脸处理策略。
 
-Bei 1:N mit automatischer Aufteilung können identities/<Identitätsordner> oder direkte Identitätsordner verwendet werden; jede Identität benötigt gallery und probe.
-Bei strukturiertem 1:N sind gallery/<identity> und probe/<identity> erforderlich; unknown/ ist optional für FAR-Impostor-Negativbeispiele.
+多人脸处理
 
-Die Validierung prüft Struktur, gallery/probe, positive/negative Beispiele, Lesbarkeit der Bilder und die Mehrgesichter-Strategie.""",
-    "pt": """Esta página executa avaliações locais 1:1 e 1:N. Os dados não são carregados automaticamente.
+- Require exactly one face: 多人脸图片会在核验阶段失败。
+- Use largest face: 评测使用检测到的最大人脸。
+- Use largest centered face: 评测使用 area - center_distance^2 * 2.0 得分最高的人脸。
+- Mark as skip: 多人脸图片会被跳过；如果被跳过的是 gallery 图片，则可能导致核验失败。
 
-Em 1:1 com divisão automática, é escolhida uma imagem gallery por identidade e as restantes são probe para avaliação probe vs gallery.
-Em 1:1 sem divisão automática, todas as imagens são probes e são geradas comparações par a par.
+报告输出
 
-Em 1:N com divisão automática, use identities/<pastas de identidade> ou pastas de identidade diretamente; cada identidade requer gallery e probe.
-Em 1:N estruturado, gallery/<identity> e probe/<identity> são obrigatórios; unknown/ é opcional para negativos impostores de FAR.
+1:1 报告包含最佳 cosine 阈值下的 accuracy、FAR/FRR、TAR@FAR、阈值建议、延迟和原始结果样例。
 
-A validação verifica estrutura, gallery/probe, amostras positivas/negativas, leitura das imagens e política de múltiplos rostos.""",
-    "ru": """Эта страница выполняет локальную оценку 1:1 и 1:N. Данные не загружаются автоматически.
+1:N 报告包含 Top1、TAR@FAR、阈值建议、延迟和原始结果样例。""",
+    "ja": """Enterprise Evaluation ページでは、ID フォルダからローカルの 1:1 検証と 1:N 識別評価を実行できます。画像、特徴量、レポートは自動アップロードされません。
 
-В 1:1 с авторазделением для каждой идентичности выбирается одно изображение gallery, остальные используются как probe для probe vs gallery.
-В 1:1 без авторазделения все изображения считаются probe и сравниваются попарно.
+1:1 検証
 
-В 1:N с авторазделением можно использовать identities/<папки идентичностей> или папки идентичностей напрямую; каждой идентичности нужны gallery и probe.
-В структурированном 1:N обязательны gallery/<identity> и probe/<identity>; unknown/ опционален для impostor-негативов FAR.
+Auto Split 有効:
 
-Валидация проверяет структуру, gallery/probe, наличие положительных и отрицательных примеров, чтение изображений и политику обработки нескольких лиц.""",
+dataset_1v1/
+  0001__Alice/
+    gallery.jpg
+    img002.jpg
+    img003.jpg
+  0002__Bob/
+    img001.jpg
+    img002.jpg
+
+各サブフォルダは 1 つの ID を表します。ファイル名に "gallery" を含む画像がその ID の gallery image として選択されます。該当ファイルがない場合は、ソート順で最初の画像が gallery になります。それ以外の画像は probe です。評価では各 probe をすべての ID の gallery と比較するため、各 trial は probe vs gallery です。
+
+Auto Split 無効:
+
+dataset_1v1/
+  0001__Alice/
+    img001.jpg
+    img002.jpg
+  0002__Bob/
+    img001.jpg
+    img002.jpg
+
+すべての画像が probe として扱われます。すべての ID フォルダ内の画像に対して、probe-vs-probe の総当たり比較を行います。
+
+1:N 識別
+
+Auto Split 有効:
+
+dataset/
+  identities/
+    0001__Alice/
+      gallery.jpg
+      img002.jpg
+      img003.jpg
+    0002__Bob/
+      img001.jpg
+      img002.jpg
+
+identities/ フォルダが存在する場合は優先されます。存在しない場合、選択したデータセットルートに ID フォルダを直接置くこともできます。Gallery の選択規則は 1:1 の Auto Split と同じです。
+
+Auto Split 無効:
+
+dataset_1n/
+  gallery/
+    0001__Alice/
+      enroll_001.jpg
+      enroll_002.jpg
+    0002__Bob/
+      enroll_001.jpg
+  probe/
+    0001__Alice/
+      test_001.jpg
+      test_002.jpg
+    0002__Bob/
+      test_001.jpg
+  unknown/
+    unknown_001.jpg
+    unknown_002.jpg
+
+gallery/ と probe/ は必須です。unknown/ は任意です。1:N 評価には常に gallery 画像が必要です。
+
+検証項目
+
+- 選択したルートが存在し、選択中の評価モードと一致していること。
+- 必須の gallery/probe フォルダまたは画像が存在すること。
+- Auto Split が有効な gallery/probe セットを作成できること。
+- 1:1 で正例ペアと負例ペアを生成できること。
+- 1:N の probe ID に有効な gallery があること。
+- 検証対象の画像を読み込めること。
+- 検出された顔数が選択した複数顔処理ポリシーに従うこと。
+
+複数顔の処理
+
+- Require exactly one face: 複数顔画像は検証で失敗します。
+- Use largest face: 検出された最大の顔を使用します。
+- Use largest centered face: area - center_distance^2 * 2.0 のスコアが最も高い顔を使用します。
+- Mark as skip: 複数顔画像をスキップします。gallery 画像がスキップされると検証失敗になる場合があります。
+
+レポート出力
+
+1:1 レポートには、最適な cosine しきい値での accuracy、FAR/FRR、TAR@FAR、しきい値推奨、レイテンシ、原始結果例が含まれます。
+
+1:N レポートには、Top1、TAR@FAR、しきい値推奨、レイテンシ、原始結果例が含まれます。""",
+    "ko": """Enterprise Evaluation 페이지는 ID 폴더에서 로컬 1:1 검증 및 1:N 식별 평가를 수행합니다. 이미지, 임베딩, 보고서는 자동 업로드되지 않습니다.
+
+1:1 검증
+
+Auto Split 켜짐:
+
+dataset_1v1/
+  0001__Alice/
+    gallery.jpg
+    img002.jpg
+    img003.jpg
+  0002__Bob/
+    img001.jpg
+    img002.jpg
+
+각 하위 폴더는 하나의 ID입니다. 파일명에 "gallery"가 포함된 이미지가 해당 ID의 gallery image로 선택됩니다. 그런 파일이 없으면 정렬된 첫 번째 이미지가 gallery가 됩니다. 나머지 이미지는 probe입니다. 평가는 각 probe를 모든 ID의 gallery와 비교하므로 각 trial은 probe vs gallery입니다.
+
+Auto Split 꺼짐:
+
+dataset_1v1/
+  0001__Alice/
+    img001.jpg
+    img002.jpg
+  0002__Bob/
+    img001.jpg
+    img002.jpg
+
+모든 이미지는 probe로 처리됩니다. 모든 ID 폴더의 이미지에 대해 전체 probe-vs-probe 쌍 비교를 수행합니다.
+
+1:N 식별
+
+Auto Split 켜짐:
+
+dataset/
+  identities/
+    0001__Alice/
+      gallery.jpg
+      img002.jpg
+      img003.jpg
+    0002__Bob/
+      img001.jpg
+      img002.jpg
+
+identities/ 폴더가 있으면 우선 사용됩니다. 없으면 선택한 데이터셋 루트에 ID 폴더를 직접 둘 수 있습니다. Gallery 선택 규칙은 1:1 Auto Split과 동일합니다.
+
+Auto Split 꺼짐:
+
+dataset_1n/
+  gallery/
+    0001__Alice/
+      enroll_001.jpg
+      enroll_002.jpg
+    0002__Bob/
+      enroll_001.jpg
+  probe/
+    0001__Alice/
+      test_001.jpg
+      test_002.jpg
+    0002__Bob/
+      test_001.jpg
+  unknown/
+    unknown_001.jpg
+    unknown_002.jpg
+
+gallery/와 probe/는 필수입니다. unknown/은 선택 사항입니다. 1:N 평가는 항상 gallery 이미지가 필요합니다.
+
+검증 항목
+
+- 선택한 루트가 존재하고 선택한 평가 모드와 일치해야 합니다.
+- 필요한 gallery/probe 폴더 또는 이미지가 있어야 합니다.
+- Auto Split이 유효한 gallery/probe 세트를 만들 수 있어야 합니다.
+- 1:1은 양성 쌍과 음성 쌍을 모두 생성할 수 있어야 합니다.
+- 1:N probe ID에는 유효한 gallery가 있어야 합니다.
+- 검증 대상 이미지를 읽을 수 있어야 합니다.
+- 감지된 얼굴 수가 선택한 다중 얼굴 처리 정책을 따라야 합니다.
+
+다중 얼굴 처리
+
+- Require exactly one face: 다중 얼굴 이미지는 검증에서 실패합니다.
+- Use largest face: 감지된 가장 큰 얼굴을 사용합니다.
+- Use largest centered face: area - center_distance^2 * 2.0 점수가 가장 높은 얼굴을 사용합니다.
+- Mark as skip: 다중 얼굴 이미지는 건너뜁니다. gallery 이미지가 건너뛰어지면 검증이 실패할 수 있습니다.
+
+보고서 출력
+
+1:1 보고서에는 최적 cosine 임계값의 accuracy, FAR/FRR, TAR@FAR, 임계값 권장, 지연 시간, 원시 결과 예시가 포함됩니다.
+
+1:N 보고서에는 Top1, TAR@FAR, 임계값 권장, 지연 시간, 원시 결과 예시가 포함됩니다。""",
+    "es": """La página Enterprise Evaluation admite evaluación local 1:1 y 1:N desde carpetas de identidad. Las imágenes, embeddings e informes no se suben automáticamente.
+
+Verificación 1:1
+
+Auto Split activado:
+
+dataset_1v1/
+  0001__Alice/
+    gallery.jpg
+    img002.jpg
+    img003.jpg
+  0002__Bob/
+    img001.jpg
+    img002.jpg
+
+Cada subcarpeta representa una identidad. Una imagen cuyo nombre contiene "gallery" se selecciona como gallery image de esa identidad. Si no existe, se usa la primera imagen ordenada como gallery. Las demás imágenes son probes. La evaluación compara cada probe contra la gallery de cada identidad, por lo que cada trial es probe vs gallery.
+
+Auto Split desactivado:
+
+dataset_1v1/
+  0001__Alice/
+    img001.jpg
+    img002.jpg
+  0002__Bob/
+    img001.jpg
+    img002.jpg
+
+Cada imagen se trata como probe. La evaluación ejecuta comparaciones completas probe-vs-probe entre todas las carpetas de identidad.
+
+Identificación 1:N
+
+Auto Split activado:
+
+dataset/
+  identities/
+    0001__Alice/
+      gallery.jpg
+      img002.jpg
+      img003.jpg
+    0002__Bob/
+      img001.jpg
+      img002.jpg
+
+La carpeta identities/ se prefiere cuando existe. Si no existe, la raíz seleccionada puede contener carpetas de identidad directamente. La selección de gallery sigue la misma regla de Auto Split que 1:1.
+
+Auto Split desactivado:
+
+dataset_1n/
+  gallery/
+    0001__Alice/
+      enroll_001.jpg
+      enroll_002.jpg
+    0002__Bob/
+      enroll_001.jpg
+  probe/
+    0001__Alice/
+      test_001.jpg
+      test_002.jpg
+    0002__Bob/
+      test_001.jpg
+  unknown/
+    unknown_001.jpg
+    unknown_002.jpg
+
+gallery/ y probe/ son obligatorias. unknown/ es opcional. La evaluación 1:N siempre requiere imágenes gallery.
+
+Comprobaciones de validación
+
+- La raíz seleccionada existe y coincide con el modo elegido.
+- Las carpetas o imágenes gallery/probe requeridas existen.
+- Auto Split puede crear conjuntos gallery/probe válidos.
+- 1:1 puede generar pares positivos y negativos.
+- Las identidades probe de 1:N tienen cobertura gallery válida.
+- Cada imagen que debe validarse puede leerse.
+- El número de caras detectadas sigue la política de manejo de múltiples caras.
+
+Manejo de múltiples caras
+
+- Require exactly one face: las imágenes con varias caras fallan en validación.
+- Use largest face: se usa la cara detectada más grande.
+- Use largest centered face: se usa la cara con mayor puntuación area - center_distance^2 * 2.0.
+- Mark as skip: las imágenes con varias caras se omiten; omitir imágenes gallery puede hacer fallar la validación.
+
+Salidas del informe
+
+Los informes 1:1 incluyen accuracy con el mejor umbral cosine, FAR/FRR, TAR@FAR, recomendaciones de umbral, latencia y ejemplos de resultados sin procesar.
+
+Los informes 1:N incluyen Top1, TAR@FAR, recomendaciones de umbral, latencia y ejemplos de resultados sin procesar.""",
+    "fr": """La page Enterprise Evaluation prend en charge l’évaluation locale 1:1 et 1:N à partir de dossiers d’identité. Les images, embeddings et rapports ne sont pas téléversés automatiquement.
+
+Vérification 1:1
+
+Auto Split activé :
+
+dataset_1v1/
+  0001__Alice/
+    gallery.jpg
+    img002.jpg
+    img003.jpg
+  0002__Bob/
+    img001.jpg
+    img002.jpg
+
+Chaque sous-dossier représente une identité. Une image dont le nom contient "gallery" est sélectionnée comme gallery image de cette identité. Si aucun fichier ne correspond, la première image triée est utilisée comme gallery. Les autres images sont des probes. L’évaluation compare chaque probe à la gallery de chaque identité ; chaque trial est donc probe vs gallery.
+
+Auto Split désactivé :
+
+dataset_1v1/
+  0001__Alice/
+    img001.jpg
+    img002.jpg
+  0002__Bob/
+    img001.jpg
+    img002.jpg
+
+Chaque image est traitée comme probe. L’évaluation exécute des comparaisons probe-vs-probe complètes entre tous les dossiers d’identité.
+
+Identification 1:N
+
+Auto Split activé :
+
+dataset/
+  identities/
+    0001__Alice/
+      gallery.jpg
+      img002.jpg
+      img003.jpg
+    0002__Bob/
+      img001.jpg
+      img002.jpg
+
+Le dossier identities/ est préféré lorsqu’il existe. Sinon, la racine sélectionnée peut contenir directement les dossiers d’identité. La sélection de gallery suit la même règle Auto Split que 1:1.
+
+Auto Split désactivé :
+
+dataset_1n/
+  gallery/
+    0001__Alice/
+      enroll_001.jpg
+      enroll_002.jpg
+    0002__Bob/
+      enroll_001.jpg
+  probe/
+    0001__Alice/
+      test_001.jpg
+      test_002.jpg
+    0002__Bob/
+      test_001.jpg
+  unknown/
+    unknown_001.jpg
+    unknown_002.jpg
+
+gallery/ et probe/ sont obligatoires. unknown/ est optionnel. L’évaluation 1:N nécessite toujours des images gallery.
+
+Contrôles de validation
+
+- La racine sélectionnée existe et correspond au mode choisi.
+- Les dossiers ou images gallery/probe requis existent.
+- Auto Split peut créer des ensembles gallery/probe valides.
+- 1:1 peut générer des paires positives et négatives.
+- Les identités probe de 1:N disposent d’une gallery valide.
+- Chaque image à valider peut être lue.
+- Le nombre de visages détectés respecte la politique multi-visage sélectionnée.
+
+Gestion multi-visage
+
+- Require exactly one face: les images multi-visages échouent à la validation.
+- Use largest face: l’évaluation utilise le plus grand visage détecté.
+- Use largest centered face: l’évaluation utilise le visage au meilleur score area - center_distance^2 * 2.0.
+- Mark as skip: les images multi-visages sont ignorées ; ignorer une image gallery peut faire échouer la validation.
+
+Sorties de rapport
+
+Les rapports 1:1 incluent l’accuracy au meilleur seuil cosine, FAR/FRR, TAR@FAR, recommandations de seuil, latence et exemples de résultats bruts.
+
+Les rapports 1:N incluent Top1, TAR@FAR, recommandations de seuil, latence et exemples de résultats bruts.""",
+    "de": """Die Seite Enterprise Evaluation unterstützt lokale 1:1-Verifikation und 1:N-Identifikation aus Identitätsordnern. Bilder, Embeddings und Berichte werden nicht automatisch hochgeladen.
+
+1:1-Verifikation
+
+Auto Split aktiviert:
+
+dataset_1v1/
+  0001__Alice/
+    gallery.jpg
+    img002.jpg
+    img003.jpg
+  0002__Bob/
+    img001.jpg
+    img002.jpg
+
+Jeder Unterordner steht für eine Identität. Eine Datei, deren Name "gallery" enthält, wird als gallery image dieser Identität gewählt. Wenn keine solche Datei vorhanden ist, wird das erste sortierte Bild als gallery verwendet. Alle anderen Bilder sind probes. Die Evaluierung vergleicht jede probe mit der gallery jeder Identität; jeder trial ist also probe vs gallery.
+
+Auto Split deaktiviert:
+
+dataset_1v1/
+  0001__Alice/
+    img001.jpg
+    img002.jpg
+  0002__Bob/
+    img001.jpg
+    img002.jpg
+
+Jedes Bild wird als probe behandelt. Die Evaluierung führt vollständige probe-vs-probe-Paarvergleiche über alle Identitätsordner aus.
+
+1:N-Identifikation
+
+Auto Split aktiviert:
+
+dataset/
+  identities/
+    0001__Alice/
+      gallery.jpg
+      img002.jpg
+      img003.jpg
+    0002__Bob/
+      img001.jpg
+      img002.jpg
+
+Der Ordner identities/ wird bevorzugt, wenn er vorhanden ist. Falls nicht, kann der ausgewählte Dataset-Root Identitätsordner direkt enthalten. Die Gallery-Auswahl folgt derselben Auto-Split-Regel wie bei 1:1.
+
+Auto Split deaktiviert:
+
+dataset_1n/
+  gallery/
+    0001__Alice/
+      enroll_001.jpg
+      enroll_002.jpg
+    0002__Bob/
+      enroll_001.jpg
+  probe/
+    0001__Alice/
+      test_001.jpg
+      test_002.jpg
+    0002__Bob/
+      test_001.jpg
+  unknown/
+    unknown_001.jpg
+    unknown_002.jpg
+
+gallery/ und probe/ sind erforderlich. unknown/ ist optional. Eine 1:N-Evaluierung benötigt immer gallery-Bilder.
+
+Validierungsprüfungen
+
+- Der ausgewählte Root existiert und passt zum gewählten Modus.
+- Erforderliche gallery/probe-Ordner oder Bilder existieren.
+- Auto Split kann gültige gallery/probe-Sets erzeugen.
+- 1:1 kann positive und negative Paare erzeugen.
+- 1:N-probe-Identitäten haben gültige gallery-Abdeckung.
+- Jedes zu validierende Bild kann gelesen werden.
+- Die erkannte Gesichtszahl folgt der ausgewählten Mehrgesichter-Strategie.
+
+Mehrgesichter-Strategie
+
+- Require exactly one face: Bilder mit mehreren Gesichtern schlagen in der Validierung fehl.
+- Use largest face: Das größte erkannte Gesicht wird verwendet.
+- Use largest centered face: Das Gesicht mit dem besten Score area - center_distance^2 * 2.0 wird verwendet.
+- Mark as skip: Bilder mit mehreren Gesichtern werden übersprungen; übersprungene gallery-Bilder können die Validierung fehlschlagen lassen.
+
+Berichtsausgaben
+
+1:1-Berichte enthalten accuracy beim besten cosine-Schwellenwert, FAR/FRR, TAR@FAR, Schwellenwertempfehlungen, Latenz und Beispiele roher Ergebnisse.
+
+1:N-Berichte enthalten Top1, TAR@FAR, Schwellenwertempfehlungen, Latenz und Beispiele roher Ergebnisse.""",
+    "pt": """A página Enterprise Evaluation suporta avaliação local 1:1 e identificação 1:N a partir de pastas de identidade. Imagens, embeddings e relatórios não são carregados automaticamente.
+
+Verificação 1:1
+
+Auto Split ativado:
+
+dataset_1v1/
+  0001__Alice/
+    gallery.jpg
+    img002.jpg
+    img003.jpg
+  0002__Bob/
+    img001.jpg
+    img002.jpg
+
+Cada subpasta representa uma identidade. Uma imagem cujo nome contém "gallery" é escolhida como gallery image dessa identidade. Se não existir, a primeira imagem ordenada é usada como gallery. As restantes imagens são probes. A avaliação compara cada probe com a gallery de cada identidade; cada trial é probe vs gallery.
+
+Auto Split desativado:
+
+dataset_1v1/
+  0001__Alice/
+    img001.jpg
+    img002.jpg
+  0002__Bob/
+    img001.jpg
+    img002.jpg
+
+Cada imagem é tratada como probe. A avaliação executa comparações completas probe-vs-probe entre todas as pastas de identidade.
+
+Identificação 1:N
+
+Auto Split ativado:
+
+dataset/
+  identities/
+    0001__Alice/
+      gallery.jpg
+      img002.jpg
+      img003.jpg
+    0002__Bob/
+      img001.jpg
+      img002.jpg
+
+A pasta identities/ é preferida quando existe. Se não existir, a raiz selecionada pode conter diretamente pastas de identidade. A seleção de gallery segue a mesma regra de Auto Split do 1:1.
+
+Auto Split desativado:
+
+dataset_1n/
+  gallery/
+    0001__Alice/
+      enroll_001.jpg
+      enroll_002.jpg
+    0002__Bob/
+      enroll_001.jpg
+  probe/
+    0001__Alice/
+      test_001.jpg
+      test_002.jpg
+    0002__Bob/
+      test_001.jpg
+  unknown/
+    unknown_001.jpg
+    unknown_002.jpg
+
+gallery/ e probe/ são obrigatórios. unknown/ é opcional. A avaliação 1:N sempre requer imagens gallery.
+
+Verificações de validação
+
+- A raiz selecionada existe e corresponde ao modo selecionado.
+- As pastas ou imagens gallery/probe necessárias existem.
+- Auto Split consegue criar conjuntos gallery/probe válidos.
+- 1:1 consegue gerar pares positivos e negativos.
+- Identidades probe de 1:N têm cobertura gallery válida.
+- Cada imagem a validar pode ser lida.
+- A contagem de faces detectadas segue a política de múltiplas faces selecionada.
+
+Tratamento de múltiplas faces
+
+- Require exactly one face: imagens com múltiplas faces falham na validação.
+- Use largest face: a avaliação usa a maior face detectada.
+- Use largest centered face: a avaliação usa a face com maior pontuação area - center_distance^2 * 2.0.
+- Mark as skip: imagens com múltiplas faces são ignoradas; imagens gallery ignoradas podem fazer a validação falhar.
+
+Saídas do relatório
+
+Relatórios 1:1 incluem accuracy no melhor limiar cosine, FAR/FRR, TAR@FAR, recomendações de limiar, latência e exemplos de resultados brutos.
+
+Relatórios 1:N incluem Top1, TAR@FAR, recomendações de limiar, latência e exemplos de resultados brutos.""",
+    "ru": """Страница Enterprise Evaluation поддерживает локальную оценку 1:1 и 1:N из папок идентичностей. Изображения, эмбеддинги и отчеты не загружаются автоматически.
+
+Верификация 1:1
+
+Auto Split включен:
+
+dataset_1v1/
+  0001__Alice/
+    gallery.jpg
+    img002.jpg
+    img003.jpg
+  0002__Bob/
+    img001.jpg
+    img002.jpg
+
+Каждая подпапка представляет одну идентичность. Файл, имя которого содержит "gallery", выбирается как gallery image для этой идентичности. Если такого файла нет, первым gallery становится первое изображение в отсортированном списке. Все остальные изображения являются probes. Оценка сравнивает каждый probe с gallery каждой идентичности, поэтому каждый trial — это probe vs gallery.
+
+Auto Split отключен:
+
+dataset_1v1/
+  0001__Alice/
+    img001.jpg
+    img002.jpg
+  0002__Bob/
+    img001.jpg
+    img002.jpg
+
+Каждое изображение считается probe. Оценка выполняет полные попарные сравнения probe-vs-probe по всем папкам идентичностей.
+
+Идентификация 1:N
+
+Auto Split включен:
+
+dataset/
+  identities/
+    0001__Alice/
+      gallery.jpg
+      img002.jpg
+      img003.jpg
+    0002__Bob/
+      img001.jpg
+      img002.jpg
+
+Папка identities/ используется с приоритетом, если она существует. Если ее нет, выбранный корень датасета может напрямую содержать папки идентичностей. Выбор gallery следует тому же правилу Auto Split, что и в 1:1.
+
+Auto Split отключен:
+
+dataset_1n/
+  gallery/
+    0001__Alice/
+      enroll_001.jpg
+      enroll_002.jpg
+    0002__Bob/
+      enroll_001.jpg
+  probe/
+    0001__Alice/
+      test_001.jpg
+      test_002.jpg
+    0002__Bob/
+      test_001.jpg
+  unknown/
+    unknown_001.jpg
+    unknown_002.jpg
+
+gallery/ и probe/ обязательны. unknown/ является опциональной. Оценка 1:N всегда требует gallery-изображения.
+
+Проверки валидации
+
+- Выбранный корень существует и соответствует выбранному режиму.
+- Необходимые папки или изображения gallery/probe существуют.
+- Auto Split может создать валидные наборы gallery/probe.
+- 1:1 может создать положительные и отрицательные пары.
+- Идентичности probe в 1:N имеют валидное покрытие gallery.
+- Каждое проверяемое изображение можно прочитать.
+- Число обнаруженных лиц соответствует выбранной политике обработки нескольких лиц.
+
+Обработка нескольких лиц
+
+- Require exactly one face: изображения с несколькими лицами не проходят валидацию.
+- Use largest face: оценка использует самое крупное обнаруженное лицо.
+- Use largest centered face: оценка использует лицо с лучшим счетом area - center_distance^2 * 2.0.
+- Mark as skip: изображения с несколькими лицами пропускаются; пропуск gallery-изображения может привести к ошибке валидации.
+
+Вывод отчетов
+
+Отчеты 1:1 включают accuracy при лучшем cosine-пороге, FAR/FRR, TAR@FAR, рекомендации по порогу, задержку и примеры сырых результатов.
+
+Отчеты 1:N включают Top1, TAR@FAR, рекомендации по порогу, задержку и примеры сырых результатов.""",
 }
 
 
 def dataset_rules_text(language: str | None) -> str:
-    summary = DATASET_RULES_LOCAL_SUMMARY.get(effective_language(language))
-    return f"{summary}\n\n---\n\n{DATASET_RULES_TEXT}" if summary else DATASET_RULES_TEXT
+    lang = effective_language(language)
+    text = DATASET_RULES_LOCAL_TEXT.get(lang)
+    if text:
+        return f"{tr('Evaluation Dataset Rules', lang)}\n\n{text}"
+    return DATASET_RULES_TEXT
 
 
 class DatasetRulesDialog(QDialog):
@@ -263,7 +897,7 @@ class EnterpriseEvalPage(BasePage):
         )
         self.multi_face_policy.currentIndexChanged.connect(self._update_instructions)
         self.dataset_root = DropInput("Identity Folders / Dataset Root", mode="folder")
-        self.dataset_root.pathsChanged.connect(self._invalidate_validation)
+        self.dataset_root.pathsChanged.connect(self._on_dataset_paths_changed)
         self.mode_summary = QLabel()
         self.mode_summary.setWordWrap(True)
         self.mode_summary.setProperty("role", "muted")
@@ -291,8 +925,6 @@ class EnterpriseEvalPage(BasePage):
         data_card.installEventFilter(self)
         self.dataset_drop_card = data_card
         data_layout.addWidget(self.dataset_root)
-        self.mode_summary.setAcceptDrops(True)
-        self.mode_summary.installEventFilter(self)
         data_layout.addWidget(self.mode_summary)
         data_layout.addStretch(1)
 
@@ -305,11 +937,9 @@ class EnterpriseEvalPage(BasePage):
         button_row = QHBoxLayout()
         self.validate_button = self.button("Validate Dataset", self.validate_dataset)
         self.run_button = self.button("Run Evaluation", self.run, enabled=False)
-        self.export_pdf_button = self.button("Export PDF", self.export_pdf)
         self.open_reports_button = self.button("Open Report Folder", self.open_report_folder)
         button_row.addWidget(self.validate_button)
         button_row.addWidget(self.run_button)
-        button_row.addWidget(self.export_pdf_button)
         button_row.addWidget(self.open_reports_button)
         button_row.addStretch(1)
         actions_layout.addLayout(button_row)
@@ -335,7 +965,6 @@ class EnterpriseEvalPage(BasePage):
     def eventFilter(self, watched, event) -> bool:  # noqa: N802
         dataset_targets = {
             getattr(self, "dataset_drop_card", None),
-            getattr(self, "mode_summary", None),
         }
         if watched in dataset_targets:
             if event.type() in (QEvent.DragEnter, QEvent.DragMove):
@@ -375,6 +1004,10 @@ class EnterpriseEvalPage(BasePage):
     def _set_dataset_drag_active(self, active: bool) -> None:
         if hasattr(self.dataset_root, "_set_property"):
             self.dataset_root._set_property("dragActive", bool(active))
+
+    def _on_dataset_paths_changed(self, paths=None) -> None:
+        del paths
+        self._invalidate_validation()
 
     def _update_instructions(self) -> None:
         language = self.context.config.ui_language
@@ -541,9 +1174,10 @@ class EnterpriseEvalPage(BasePage):
             )
 
         def done(result):
+            language = self.context.config.ui_language
             self.last_result = result
-            self.last_report_paths = write_reports(result, self.context.config.report_dir)
-            report_path = self.last_report_paths.get("markdown", "")
+            self.last_report_paths = write_reports(result, self.context.config.report_dir, language=language)
+            report_path = self.last_report_paths.get("pdf") or self.last_report_paths.get("markdown", "")
             self.context.storage.save_evaluation_run(
                 result.scenario,
                 result.model_name,
@@ -556,9 +1190,11 @@ class EnterpriseEvalPage(BasePage):
                 created_at=result.created_at,
             )
             self.output.setPlainText(self._summary_text(result, self.last_report_paths))
-            pdf_path = self.last_report_paths.get("pdf")
-            self.set_status(
-                f"Evaluation complete. PDF report: {pdf_path}" if pdf_path else f"Evaluation complete. Report: {report_path}"
+            self.set_status(f"{tr('Evaluation complete. Report saved to:', language)} {report_path}")
+            QMessageBox.information(
+                self,
+                tr("Evaluation report saved", language),
+                f"{tr('Evaluation report saved to:', language)}\n{report_path}",
             )
 
         self.run_task("Enterprise evaluation", task, done)
@@ -591,14 +1227,15 @@ class EnterpriseEvalPage(BasePage):
         return "\n".join(lines)
 
     def _summary_text(self, result, paths: dict[str, str]) -> str:
+        language = self.context.config.ui_language
         lines = [
-            f"Scenario: {result.scenario}",
-            f"Dataset: {result.dataset_summary}",
-            f"Report Markdown: {paths.get('markdown', 'not exported')}",
-            f"Report HTML: {paths.get('html', 'not exported')}",
-            f"Report PDF: {paths.get('pdf', 'PDF unavailable; install reportlab')}",
+            f"{tr('Scenario', language)}: {result.scenario}",
+            f"{tr('Dataset', language)}: {result.dataset_summary}",
+            f"{tr('Report PDF', language)}: {paths.get('pdf', tr('not exported', language))}",
+            f"{tr('Report Markdown', language)}: {paths.get('markdown', tr('not exported', language))}",
+            f"{tr('Report HTML', language)}: {paths.get('html', tr('not exported', language))}",
             "",
-            "Metrics:",
+            f"{tr('Metrics', language)}:",
         ]
         for key, value in result.metrics.items():
             if isinstance(value, float):
@@ -606,31 +1243,10 @@ class EnterpriseEvalPage(BasePage):
             else:
                 lines.append(f"{key}: {value}")
         if result.errors:
-            lines.extend(["", f"Errors: {len(result.errors)}", "First errors:"])
+            lines.extend(["", f"{tr('Errors', language)}: {len(result.errors)}", f"{tr('First errors', language)}:"])
             for row in result.errors[:10]:
                 lines.append(str(row))
         return "\n".join(lines)
-
-    def export_pdf(self) -> None:
-        if self.last_result is None:
-            self.show_error("Run an evaluation first.")
-            return
-        self.last_report_paths = write_reports(self.last_result, self.context.config.report_dir)
-        pdf_path = self.last_report_paths.get("pdf")
-        if not pdf_path:
-            self.show_error("PDF export is unavailable. Please install reportlab.")
-            return
-        target, _ = QFileDialog.getSaveFileName(
-            self,
-            "Export PDF Report",
-            str(Path(self.context.config.report_dir) / Path(pdf_path).name),
-            "PDF (*.pdf)",
-        )
-        if target:
-            shutil.copyfile(pdf_path, target)
-            self.set_status(f"PDF report exported to {target}")
-        else:
-            self.set_status(f"PDF report exported to {pdf_path}")
 
     def open_report_folder(self) -> None:
         from PySide6.QtCore import QUrl

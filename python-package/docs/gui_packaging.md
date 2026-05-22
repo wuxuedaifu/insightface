@@ -45,7 +45,42 @@ The chosen parameter name is `--with-face3d`.
 
 ## Upload PyPI
 
+The repository includes a guarded release helper for official PyPI. It builds
+the source distribution and wheel, runs the GUI release smoke tests, checks that
+the version is not already published, runs `twine check`, and asks for explicit
+confirmation before upload.
+
+Dry run:
+
 ```bash
+cd python-package
+python -m pip install build twine pytest
+bash packaging/pypi/build_upload_pypi.sh --dry-run
+```
+
+Official upload:
+
+```bash
+cd python-package
+export TWINE_USERNAME=__token__
+export TWINE_PASSWORD='pypi-your-official-token'
+bash packaging/pypi/build_upload_pypi.sh
+```
+
+The default release does not build `face3d`. To publish a package with the
+optional extension enabled, run:
+
+```bash
+bash packaging/pypi/build_upload_pypi.sh --with-face3d
+```
+
+Manual equivalent:
+
+```bash
+cd python-package
+python -m pip install build twine
+python -m build
+python -m twine check dist/*
 python -m twine upload dist/*
 ```
 
@@ -53,7 +88,8 @@ Only project maintainers or CI configured with PyPI Trusted Publisher should
 upload official PyPI releases. Codex should not attempt to upload PyPI.
 
 Before releasing 1.0, confirm model licenses, README content, version numbers,
-wheel contents, and third-party notices.
+wheel contents, third-party notices, and that the package name is `insightface`.
+PyPI versions are immutable, so a released version cannot be overwritten.
 
 ## Build Desktop Application
 

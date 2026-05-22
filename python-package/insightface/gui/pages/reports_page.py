@@ -58,10 +58,11 @@ class ReportsPage(BasePage):
         if not run:
             return
         result = EvaluationResult(scenario=run["scenario"], model_name=run["model_name"], provider=run["provider"], threshold=float(run["threshold"]), dataset_summary=run.get("dataset_summary", {}), metrics=run.get("metrics", {}), errors=[], latency=run.get("hardware", {}), license_status=self.context.config.license_status, created_at=run.get("created_at") or utc_now_iso())
-        paths = write_reports(result, self.context.config.report_dir)
-        self.context.storage.save_evaluation_run(result.scenario, result.model_name, result.provider, result.threshold, result.dataset_summary, result.metrics, result.latency, paths["markdown"], result.created_at)
+        paths = write_reports(result, self.context.config.report_dir, language=self.context.config.ui_language)
+        report_path = paths.get("pdf") or paths["markdown"]
+        self.context.storage.save_evaluation_run(result.scenario, result.model_name, result.provider, result.threshold, result.dataset_summary, result.metrics, result.latency, report_path, result.created_at)
         self.refresh()
-        self.set_status(f"Report re-exported to {paths['markdown']}")
+        self.set_status(f"Report re-exported to {report_path}")
 
     def delete_selected(self) -> None:
         run = self._selected_run()

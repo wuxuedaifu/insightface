@@ -15,6 +15,12 @@ def test_cli_import_and_version(capsys):
     assert "insightface 1.0" in out
 
 
+def test_insightface_cli_import_does_not_require_mxnet():
+    from insightface.commands import insightface_cli
+
+    assert callable(insightface_cli.main)
+
+
 def test_safe_mode_is_runtime_only(tmp_path):
     workspace = tmp_path / "workspace"
     cfg = AppConfig(workspace_path=str(workspace))

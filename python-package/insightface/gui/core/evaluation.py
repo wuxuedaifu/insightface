@@ -352,6 +352,31 @@ def _validate_image_spec(
         return row
 
 
+def _quick_validation_specs(specs: List[Dict[str, Any]], policy: str) -> List[Dict[str, Any]]:
+    if policy == MULTI_FACE_REQUIRE_ONE:
+        return specs
+    gallery_specs = [spec for spec in specs if spec.get("role") == "gallery"]
+    if gallery_specs:
+        return gallery_specs
+    representatives: List[Dict[str, Any]] = []
+    seen = set()
+    for spec in specs:
+        identity = spec.get("identity", "")
+        if identity in seen:
+            continue
+        seen.add(identity)
+        representatives.append(spec)
+    return representatives
+
+
+def _validation_scope_label(policy: str, specs_to_check: List[Dict[str, Any]], specs: List[Dict[str, Any]]) -> str:
+    if policy == MULTI_FACE_REQUIRE_ONE:
+        return "all images"
+    if len(specs_to_check) == len(specs):
+        return "all gallery images"
+    return "gallery or representative images only"
+
+
 def validate_enterprise_dataset(
     dataset_root: str | Path,
     mode: str,
@@ -387,9 +412,24 @@ def validate_enterprise_dataset(
     result.errors.extend(structure_errors)
     if not specs:
         result.errors.append({"path": str(root), "error": "no image files found for this evaluation mode"})
+    if result.errors:
+        result.summary.update(
+            {
+                "total_images": len(specs),
+                "images_checked": 0,
+                "valid_images": 0,
+                "skipped_images": 0,
+                "multi_face_images": 0,
+                "validation_scope": "structure only",
+                "errors": len(result.errors),
+                "warnings": len(result.warnings),
+            }
+        )
+        return result
 
     rows: List[Dict[str, Any]] = []
-    for index, spec in enumerate(specs):
+    specs_to_check = _quick_validation_specs(specs, policy)
+    for index, spec in enumerate(specs_to_check):
         if cancel_callback and cancel_callback():
             result.errors.append({"error": "validation cancelled"})
             break
@@ -400,13 +440,33 @@ def validate_enterprise_dataset(
         elif row.get("warning"):
             result.warnings.append({key: row[key] for key in ("identity", "path", "role", "face_count", "warning") if key in row})
         if progress_callback:
-            progress_callback(index + 1, max(1, len(specs)), f"Validated image {index + 1}/{len(specs)}")
+            progress_callback(index + 1, max(1, len(specs_to_check)), f"Validated image {index + 1}/{len(specs_to_check)}")
+        if row.get("error"):
+            break
 
-    valid_specs = [
-        dict(spec, **{"path": str(spec["path"])})
-        for spec, row in zip(specs, rows)
-        if row.get("valid")
-    ]
+    if result.errors:
+        result.summary.update(
+            {
+                "total_images": len(specs),
+                "images_checked": len(rows),
+                "valid_images": sum(1 for row in rows if row.get("valid")),
+                "skipped_images": sum(1 for row in rows if row.get("skipped")),
+                "multi_face_images": sum(1 for row in rows if row.get("multi_face")),
+                "validation_scope": _validation_scope_label(policy, specs_to_check, specs),
+                "errors": len(result.errors),
+                "warnings": len(result.warnings),
+            }
+        )
+        return result
+
+    if policy == MULTI_FACE_REQUIRE_ONE:
+        valid_specs = [
+            dict(spec, **{"path": str(spec["path"])})
+            for spec, row in zip(specs_to_check, rows)
+            if row.get("valid")
+        ]
+    else:
+        valid_specs = [dict(spec, **{"path": str(spec["path"])}) for spec in specs]
     valid_galleries = [spec for spec in valid_specs if spec.get("role") == "gallery"]
     valid_probes = [spec for spec in valid_specs if spec.get("role") == "probe"]
 
@@ -468,10 +528,12 @@ def validate_enterprise_dataset(
 
     result.summary.update(
         {
-            "images_checked": len(specs),
-            "valid_images": sum(1 for row in rows if row.get("valid")),
+            "total_images": len(specs),
+            "images_checked": len(rows),
+            "valid_images": len(valid_specs),
             "skipped_images": sum(1 for row in rows if row.get("skipped")),
             "multi_face_images": sum(1 for row in rows if row.get("multi_face")),
+            "validation_scope": _validation_scope_label(policy, specs_to_check, specs),
             "errors": len(result.errors),
             "warnings": len(result.warnings),
         }
@@ -526,8 +588,11 @@ def _tar_far_from_scores(
         "positive_trials_for_tar": int(positive_total),
         "negative_trials_for_far": len(negative_scores),
     }
+    far_targets_with_budget = [
+        far for far in far_targets if int(math.floor(far * len(negative_scores))) > 0
+    ]
     if positive_total <= 0 or not negative_scores:
-        for far in far_targets:
+        for far in far_targets_with_budget:
             label = _far_label(far)
             metrics[f"TAR@FAR={label}"] = "insufficient data"
             metrics[f"Threshold@FAR={label}"] = "insufficient data"
@@ -540,7 +605,7 @@ def _tar_far_from_scores(
     candidates = np.unique(np.concatenate(([np.nextafter(max_negative, np.inf)], all_scores)))
     positive_accepts = positive_total - np.searchsorted(positives, candidates, side="left")
     false_accepts_by_threshold = len(negative_scores) - np.searchsorted(negatives, candidates, side="left")
-    for far in far_targets:
+    for far in far_targets_with_budget:
         label = _far_label(far)
         allowed_fp = int(math.floor(far * len(negative_scores)))
         valid = false_accepts_by_threshold <= allowed_fp

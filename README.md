@@ -9,6 +9,14 @@ InsightFace project is mainly maintained by [Jia Guo](mailto:guojia@insightface.
 
 For more information, please visit our website at [https://insightface.ai](https://insightface.ai)
 
+## InsightFace 1.0 Update
+
+InsightFace 1.0 focuses on easier local evaluation and desktop usage:
+
+- The default Python package no longer builds the optional C++/Cython `face3d` extension, reducing local compiler requirements.
+- Added **InsightFace Evaluation Studio**, a cross-platform GUI Demo for Windows, macOS, and Linux.
+- The GUI supports local face recognition, enterprise model evaluation/reporting, and basic face swap trials.
+
 ## License
 
 The code of InsightFace is released under the MIT License. There is no limitation for both academic and commercial usage.
@@ -25,6 +33,8 @@ Both manual-downloading models from our github repo and auto-downloading models 
 
 
 ## Top News
+
+**`2026-05-23`** `InsightFace 1.0` Added a cross-platform desktop GUI Demo for face recognition, enterprise evaluation, reports, and face swap trials, with a lighter default Python install that removes C++ build requirements.
 
 **`2025-11-18`** `[Picsi.ai]` Released Live Face Swap macOS & iOS App and updated [Picsi.ai](https://www.picsi.ai) services with our latest series of swap models (incl. [inswapper-512-live](https://github.com/deepinsight/inswapper-512-live)/Cyn/Dax).
 

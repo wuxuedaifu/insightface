@@ -91,7 +91,7 @@ class BasePage(QWidget):
     def set_status(self, message: str) -> None:
         self.status_label.setText(tr(message, self.context.config.ui_language))
         main = self.window()
-        if hasattr(main, "set_status"):
+        if main is not self and hasattr(main, "set_status"):
             main.set_status(message)
 
     def show_error(self, message: str) -> None:

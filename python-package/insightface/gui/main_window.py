@@ -33,6 +33,7 @@ from .core.config import save_config
 from .core.constants import LOCAL_PROCESSING_NOTICE, RESPONSIBLE_USE_NOTICE, WINDOW_TITLE
 from .core.face_engine import is_cuda_provider_available
 from .core.i18n import apply_translations, tr
+from .core.links import open_insightface_url
 from .core.navigation import (
     AppMode,
     NAVIGATION_MODES,
@@ -316,6 +317,11 @@ class MainWindow(QMainWindow):
             item.setSizeHint(QSize(190, 58))
             self.mode_list.addItem(item)
         layout.addWidget(self.mode_list, 1)
+        local_notice = QLabel("All processing is local. No images, embeddings, or reports are uploaded automatically.")
+        local_notice.setObjectName("localProcessingNotice")
+        local_notice.setWordWrap(True)
+        layout.addWidget(local_notice)
+        layout.addSpacing(6)
         enterprise_help = QPushButton("Enterprise Help")
         enterprise_help.setObjectName("enterpriseHelpButton")
         enterprise_help.setToolTip(
@@ -323,10 +329,6 @@ class MainWindow(QMainWindow):
         )
         enterprise_help.clicked.connect(self.open_enterprise_help)
         layout.addWidget(enterprise_help)
-        local_notice = QLabel("All processing is local. No images, embeddings, or reports are uploaded automatically.")
-        local_notice.setObjectName("localProcessingNotice")
-        local_notice.setWordWrap(True)
-        layout.addWidget(local_notice)
         return self.mode_rail
 
     def _mode_subtitle(self, mode: AppMode) -> str:
@@ -554,7 +556,7 @@ class MainWindow(QMainWindow):
         self.refresh_statusbar()
 
     def open_enterprise_help(self) -> None:
-        QDesktopServices.openUrl(QUrl(ENTERPRISE_HELP_URL))
+        open_insightface_url(ENTERPRISE_HELP_URL, content="sidebar_enterprise_help")
         self.set_status("Opened InsightFace enterprise contact page.")
 
     def set_status(self, message: str) -> None:

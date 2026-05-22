@@ -124,8 +124,16 @@ def test_dataset_rules_dialog_has_localized_help_summary():
 
     text = dataset_rules_text("zh")
 
-    assert "本页用于本地 1:1 验证和 1:N 识别评测" in text
-    assert "Enterprise Evaluation Dataset Rules" in text
+    assert text.startswith("评测数据集规则")
+    assert "支持从身份文件夹进行本地 1:1 验证和 1:N 识别评测" in text
+    assert "dataset_1v1/" in text
+    assert "dataset_1n/" in text
+    assert "gallery/" in text
+    assert "probe/" in text
+    assert "多人脸处理" in text
+    assert "报告输出" in text
+    assert "Enterprise Evaluation Dataset Rules" not in text
+    assert "Each subfolder is one identity" not in text
 
 
 def test_album_and_recognition_page_copy_is_localized():

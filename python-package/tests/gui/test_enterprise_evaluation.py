@@ -8,6 +8,7 @@ from insightface.gui.core.evaluation import (
     MULTI_FACE_USE_CENTERED_LARGEST,
     MULTI_FACE_USE_LARGEST,
     _select_face_from_faces,
+    _tar_far_from_scores,
     run_identity_identification_evaluation,
     run_identity_verification_evaluation,
     validate_enterprise_dataset,
@@ -77,8 +78,8 @@ def test_identity_verification_auto_split_generates_probe_vs_gallery_pairs(tmp_p
     assert result.metrics["positive_pairs"] == 2
     assert result.metrics["negative_pairs"] == 2
     assert result.metrics["best_accuracy"] == 1.0
-    assert "TAR@FAR=1e-6" in result.metrics
-    assert "Threshold@FAR=1e-3" in result.metrics
+    assert "TAR@FAR=1e-6" not in result.metrics
+    assert "Threshold@FAR=1e-3" not in result.metrics
 
 
 def test_identity_identification_structured_dataset_reports_top1_and_far(tmp_path):
@@ -97,8 +98,22 @@ def test_identity_identification_structured_dataset_reports_top1_and_far(tmp_pat
     assert result.scenario.startswith("Enterprise 1:N")
     assert result.metrics["gallery_identities"] == 2
     assert result.metrics["Top1"] == 1.0
-    assert "TAR@FAR=1e-5" in result.metrics
-    assert "Threshold@FAR=1e-2" in result.metrics
+    assert "TAR@FAR=1e-5" not in result.metrics
+    assert "Threshold@FAR=1e-2" not in result.metrics
+
+
+def test_tar_far_skips_targets_with_zero_false_accept_budget():
+    metrics = _tar_far_from_scores(
+        positive_scores=[0.95, 0.9],
+        positive_total=2,
+        negative_scores=[0.1] * 99 + [0.2],
+        far_targets=[1e-3, 1e-2],
+    )
+
+    assert "TAR@FAR=1e-3" not in metrics
+    assert "False accept budget@1e-3" not in metrics
+    assert metrics["False accept budget@1e-2"] == 1
+    assert "TAR@FAR=1e-2" in metrics
 
 
 def test_enterprise_validation_requires_one_face_by_default(tmp_path):
@@ -121,6 +136,8 @@ def test_enterprise_validation_requires_one_face_by_default(tmp_path):
 
     assert not result.ok
     assert any("multiple faces" in row.get("error", "") for row in result.errors)
+    assert result.summary["images_checked"] == 2
+    assert result.summary["validation_scope"] == "all images"
 
 
 def test_enterprise_validation_can_use_largest_face(tmp_path):
@@ -143,7 +160,9 @@ def test_enterprise_validation_can_use_largest_face(tmp_path):
 
     assert result.ok
     assert result.summary["comparison_pairs"] == 4
-    assert any("largest face" in row.get("warning", "") for row in result.warnings)
+    assert result.summary["images_checked"] == 2
+    assert result.summary["validation_scope"] == "gallery or representative images only"
+    assert result.warnings == []
 
 
 def test_centered_largest_face_policy_uses_area_center_penalty():
@@ -193,7 +212,9 @@ def test_enterprise_validation_can_use_centered_largest_face(tmp_path):
 
     assert result.ok
     assert result.summary["comparison_pairs"] == 4
-    assert any("largest centered face" in row.get("warning", "") for row in result.warnings)
+    assert result.summary["images_checked"] == 2
+    assert result.summary["validation_scope"] == "gallery or representative images only"
+    assert result.warnings == []
 
 
 def test_enterprise_validation_skip_multi_face_gallery_blocks_structured_1n(tmp_path):
@@ -214,3 +235,49 @@ def test_enterprise_validation_skip_multi_face_gallery_blocks_structured_1n(tmp_
 
     assert not result.ok
     assert any("gallery" in row.get("role", "") and row.get("error") for row in result.errors)
+
+
+def test_enterprise_validation_fast_policy_fails_on_no_face_gallery(tmp_path):
+    root = tmp_path / "dataset"
+    for rel in [
+        "0001__Alice/gallery_noface.jpg",
+        "0001__Alice/probe.jpg",
+        "0002__Bob/gallery.jpg",
+        "0002__Bob/probe.jpg",
+    ]:
+        _write_image(root / rel)
+
+    result = validate_enterprise_dataset(
+        root,
+        "1:1 Verification",
+        True,
+        FakeEngine(),
+        multi_face_policy=MULTI_FACE_USE_CENTERED_LARGEST,
+    )
+
+    assert not result.ok
+    assert result.summary["images_checked"] == 1
+    assert any("no face detected" in row.get("error", "") for row in result.errors)
+
+
+def test_enterprise_validation_fast_policy_does_not_inspect_probe_faces(tmp_path):
+    root = tmp_path / "dataset"
+    for rel in [
+        "0001__Alice/gallery.jpg",
+        "0001__Alice/probe_noface.jpg",
+        "0002__Bob/gallery.jpg",
+        "0002__Bob/probe.jpg",
+    ]:
+        _write_image(root / rel)
+
+    result = validate_enterprise_dataset(
+        root,
+        "1:1 Verification",
+        True,
+        FakeEngine(),
+        multi_face_policy=MULTI_FACE_USE_LARGEST,
+    )
+
+    assert result.ok
+    assert result.summary["images_checked"] == 2
+    assert result.summary["comparison_pairs"] == 4

@@ -7,7 +7,7 @@ import numpy as np
 def test_main_window_smoke(tmp_path):
     os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
     PySide6 = pytest.importorskip("PySide6")
-    from PySide6.QtCore import QUrl, Qt
+    from PySide6.QtCore import QEvent, QUrl, Qt
     from PySide6.QtWidgets import QAbstractItemView, QApplication, QLabel, QPushButton
 
     from insightface.gui.app import StudioContext, configure_qt_plugin_paths
@@ -121,7 +121,9 @@ def test_main_window_smoke(tmp_path):
     assert len(enterprise_cards) >= 3
     assert enterprise_page.dataset_root.acceptDrops()
     assert enterprise_page.dataset_drop_card.acceptDrops()
-    assert enterprise_page.mode_summary.acceptDrops()
+    assert not enterprise_page.dataset_root.select_button.isHidden()
+    assert enterprise_page.dataset_root.remove_button.isHidden()
+    assert not hasattr(enterprise_page, "dataset_path_status")
     class _Mime:
         def hasUrls(self):
             return True
@@ -134,8 +136,47 @@ def test_main_window_smoke(tmp_path):
             return _Mime()
 
     assert enterprise_page._dataset_drop_path(_Event()) == str(tmp_path)
+    class _DragEvent:
+        def __init__(self, event_type):
+            self._event_type = event_type
+            self.accepted = False
+            self.ignored = False
+
+        def type(self):
+            return self._event_type
+
+        def mimeData(self):
+            return _Mime()
+
+        def acceptProposedAction(self):
+            self.accepted = True
+
+        def ignore(self):
+            self.ignored = True
+
+    drag_event = _DragEvent(QEvent.DragEnter)
+    assert enterprise_page.dataset_root.eventFilter(enterprise_page.dataset_root.path_label, drag_event)
+    assert drag_event.accepted
+    drop_event = _DragEvent(QEvent.Drop)
+    assert enterprise_page.dataset_root.eventFilter(enterprise_page.dataset_root.path_label, drop_event)
+    assert drop_event.accepted
+    assert enterprise_page.dataset_root.path() == str(tmp_path)
+    assert enterprise_page.dataset_root.path_label.text() == f"Selected folder:\n{tmp_path}"
+    assert enterprise_page.dataset_root.path_label.toolTip() == str(tmp_path)
+    assert enterprise_page.dataset_root.select_button.isHidden()
+    assert not enterprise_page.dataset_root.remove_button.isHidden()
+    enterprise_page.dataset_root.clear()
+    assert enterprise_page.dataset_root.path() == ""
+    assert not enterprise_page.dataset_root.select_button.isHidden()
+    assert enterprise_page.dataset_root.remove_button.isHidden()
+    card_drop_event = _DragEvent(QEvent.Drop)
+    assert enterprise_page.eventFilter(enterprise_page.dataset_drop_card, card_drop_event)
+    assert card_drop_event.accepted
+    assert enterprise_page.dataset_root.path_label.text() == f"Selected folder:\n{tmp_path}"
     assert hasattr(enterprise_page, "help_button")
     assert enterprise_page.help_button.text() == "Dataset Rules"
+    assert not hasattr(enterprise_page, "export_pdf_button")
+    assert "Export PDF" not in [button.text() for button in enterprise_page.findChildren(QPushButton)]
     assert "Open Dataset Rules" in enterprise_page.mode_summary.text()
     assert "Require exactly one face" in enterprise_page.mode_summary.text()
     enterprise_page.auto_split.setChecked(False)

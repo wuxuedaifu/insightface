@@ -2,11 +2,10 @@
 
 from __future__ import annotations
 
-from PySide6.QtCore import QUrl
-from PySide6.QtGui import QDesktopServices
 from PySide6.QtWidgets import QLabel, QTableWidget, QTableWidgetItem
 
 from ..core.i18n import tr
+from ..core.links import open_insightface_url
 from ..core.licensing import allowed_usage_summary
 from ..widgets.table_utils import configure_table_columns, refresh_table_columns
 from .base import BasePage
@@ -62,9 +61,9 @@ class LicenseCenterPage(BasePage):
         refresh_table_columns(self.table)
 
     def open_homepage(self) -> None:
-        QDesktopServices.openUrl(QUrl(HOMEPAGE_URL))
+        open_insightface_url(HOMEPAGE_URL, content="license_homepage")
         self.set_status("Opened InsightFace homepage.")
 
     def open_enterprise_help(self) -> None:
-        QDesktopServices.openUrl(QUrl(ENTERPRISE_HELP_URL))
+        open_insightface_url(ENTERPRISE_HELP_URL, content="license_enterprise_support")
         self.set_status("Opened InsightFace enterprise contact page.")

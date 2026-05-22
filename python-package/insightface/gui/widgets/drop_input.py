@@ -29,11 +29,13 @@ class DropInput(QFrame):
         mode: str = "file",
         extensions: Iterable[str] | None = None,
         dialog_filter: str = "All Files (*)",
+        show_select_button: bool = True,
         parent=None,
     ):
         super().__init__(parent)
         self.title = title
         self.mode = mode
+        self.show_select_button = bool(show_select_button)
         self.extensions = {ext.lower() if ext.startswith(".") else f".{ext.lower()}" for ext in (extensions or [])}
         self.dialog_filter = dialog_filter
         self._paths: list[str] = []
@@ -52,11 +54,14 @@ class DropInput(QFrame):
         self.path_label.setObjectName("dropPrompt")
         self.path_label.setAlignment(Qt.AlignCenter)
         self.path_label.setWordWrap(True)
+        self.path_label.setMinimumHeight(72)
         self.path_label.setTextInteractionFlags(Qt.TextSelectableByMouse)
         buttons = QHBoxLayout()
         self.select_button = QPushButton("Select")
         self.remove_button = QPushButton("Remove")
         self.remove_button.setEnabled(False)
+        self.remove_button.setVisible(False)
+        self.select_button.setVisible(self.show_select_button)
         self.select_button.clicked.connect(self.browse)
         self.remove_button.clicked.connect(self.clear)
         set_button_tooltip(self.select_button)
@@ -68,7 +73,9 @@ class DropInput(QFrame):
         layout.addWidget(self.title_label)
         layout.addWidget(self.path_label)
         layout.addLayout(buttons)
-        for watched in (self, self.title_label, self.path_label):
+        for watched in (self, self.title_label, self.path_label, self.select_button, self.remove_button):
+            watched.setAcceptDrops(True)
+            watched.setMouseTracking(True)
             watched.installEventFilter(self)
 
     def paths(self) -> list[str]:
@@ -86,11 +93,18 @@ class DropInput(QFrame):
             accepted = accepted[:1]
         self._paths = accepted
         if accepted:
-            self.path_label.setText("\n".join(accepted[:8]) + (f"\n... {len(accepted)} total" if len(accepted) > 8 else ""))
+            display_text = self._selected_text(accepted)
+            self.path_label.setText(display_text)
+            self.path_label.setToolTip("\n".join(accepted))
+            self.select_button.setVisible(False)
             self.remove_button.setEnabled(True)
+            self.remove_button.setVisible(True)
         else:
             self.path_label.setText(self._empty_text())
+            self.path_label.setToolTip("")
+            self.select_button.setVisible(self.show_select_button)
             self.remove_button.setEnabled(False)
+            self.remove_button.setVisible(False)
         if emit:
             self.pathsChanged.emit(self.paths())
         self._set_property("hasFiles", bool(accepted))
@@ -98,7 +112,10 @@ class DropInput(QFrame):
     def clear(self) -> None:
         self._paths = []
         self.path_label.setText(self._empty_text())
+        self.path_label.setToolTip("")
+        self.select_button.setVisible(self.show_select_button)
         self.remove_button.setEnabled(False)
+        self.remove_button.setVisible(False)
         self._set_property("hasFiles", False)
         self.removed.emit()
         self.pathsChanged.emit([])
@@ -167,14 +184,45 @@ class DropInput(QFrame):
             return "Click to upload or drag files here."
         return "Click to upload or drag a file here."
 
+    def _selected_text(self, paths: Sequence[str]) -> str:
+        prefix = "Selected folder:" if self.mode == "folder" else "Selected files:" if self.mode == "files" else "Selected file:"
+        body = "\n".join(paths[:8])
+        if len(paths) > 8:
+            body = f"{body}\n... {len(paths)} total"
+        return f"{prefix}\n{body}"
+
     def eventFilter(self, watched, event) -> bool:  # noqa: N802
+        if event.type() in (QEvent.DragEnter, QEvent.DragMove):
+            if event.mimeData().hasUrls() and self._accepted_urls(event.mimeData().urls()):
+                self._set_property("dragActive", True)
+                event.acceptProposedAction()
+                return True
+            event.ignore()
+            return True
+        if event.type() == QEvent.DragLeave:
+            self._set_property("dragActive", False)
+            return False
+        if event.type() == QEvent.Drop:
+            self._set_property("dragActive", False)
+            paths = [url.toLocalFile() for url in event.mimeData().urls() if url.isLocalFile()]
+            accepted = [path for path in paths if self._accepts_path(path)]
+            if accepted:
+                self.set_paths(accepted)
+                event.acceptProposedAction()
+                return True
+            event.ignore()
+            return True
         if event.type() == QEvent.Enter:
             self._set_property("hoverActive", True)
             return False
         if event.type() == QEvent.Leave:
             self._update_hover_from_cursor()
             return False
-        if event.type() == QEvent.MouseButtonRelease and event.button() == Qt.LeftButton:
+        if (
+            event.type() == QEvent.MouseButtonRelease
+            and event.button() == Qt.LeftButton
+            and watched in {self, self.title_label, self.path_label}
+        ):
             self.browse()
             return True
         return super().eventFilter(watched, event)
