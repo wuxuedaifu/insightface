@@ -18,7 +18,7 @@ You have to install ``onnxruntime-gpu`` manually to enable GPU inference, or ins
 
 ### Install InsightFace Evaluation Studio GUI
 
-InsightFace 1.0 includes a local desktop GUI:
+InsightFace 1.0.1 includes a local desktop GUI:
 
 ```
 pip install "insightface[gui]"
@@ -90,7 +90,7 @@ model only when a swap is run.
 
 ### Optional face3d Build
 
-InsightFace 1.0 does not build the optional ``face3d`` Cython/C++ extension by
+InsightFace 1.0.1 does not build the optional ``face3d`` Cython/C++ extension by
 default. This keeps the default install lighter and avoids local compiler
 requirements. Users who need the legacy mask renderer / face3d path can opt in:
 
@@ -112,6 +112,14 @@ More details:
 - ``docs/gui_packaging.md``
 
 ## Change Log
+
+### [1.0.1] - 2026-05-23
+
+#### Changed
+
+- Remove the PyPI package metadata license classifier field while keeping the README license guidance.
+- Move direct `Pillow` and `scikit-learn` requirements to the GUI extra, and `matplotlib` to the optional `face3d` extra.
+- Remove unused base dependencies on `easydict` and `prettytable`.
 
 ### [1.0] - 2026-05-23
 

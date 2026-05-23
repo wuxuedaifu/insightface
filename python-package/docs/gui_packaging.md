@@ -22,7 +22,7 @@ python -m twine check dist/*
 
 ## Optional face3d Extension
 
-The default 1.0 package does not compile the optional `face3d` Cython/C++
+The default 1.0.1 package does not compile the optional `face3d` Cython/C++
 extension. This avoids requiring a C++ compiler for normal inference and GUI
 users.
 
@@ -87,7 +87,7 @@ python -m twine upload dist/*
 Only project maintainers or CI configured with PyPI Trusted Publisher should
 upload official PyPI releases. Codex should not attempt to upload PyPI.
 
-Before releasing 1.0, confirm model licenses, README content, version numbers,
+Before releasing 1.0.1, confirm model licenses, README content, version numbers,
 wheel contents, third-party notices, and that the package name is `insightface`.
 PyPI versions are immutable, so a released version cannot be overwritten.
 

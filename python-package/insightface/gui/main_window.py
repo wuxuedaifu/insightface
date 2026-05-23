@@ -30,7 +30,7 @@ from PySide6.QtWidgets import (
 )
 
 from .core.config import save_config
-from .core.constants import LOCAL_PROCESSING_NOTICE, RESPONSIBLE_USE_NOTICE, WINDOW_TITLE
+from .core.constants import APP_VERSION, LOCAL_PROCESSING_NOTICE, RESPONSIBLE_USE_NOTICE, WINDOW_TITLE
 from .core.face_engine import is_cuda_provider_available
 from .core.i18n import apply_translations, tr
 from .core.links import open_insightface_url
@@ -274,7 +274,7 @@ class MainWindow(QMainWindow):
         layout.setContentsMargins(14, 8, 14, 8)
         title = QLabel("InsightFace Evaluation Studio")
         title.setStyleSheet("font-size:18px; font-weight:700; border:0;")
-        version = QLabel("v1.0")
+        version = QLabel(f"v{APP_VERSION}")
         version.setProperty("role", "muted")
         self.model_chip = QLabel()
         self.provider_chip = QLabel()
@@ -373,7 +373,7 @@ class MainWindow(QMainWindow):
             lambda: QMessageBox.information(
                 self,
                 tr("About", self.context.config.ui_language),
-                "InsightFace Evaluation Studio v1.0",
+                f"InsightFace Evaluation Studio v{APP_VERSION}",
             )
         )
         responsible_action = help_menu.addAction("Responsible Use Notice")

@@ -1,6 +1,6 @@
 # InsightFace Evaluation Studio GUI
 
-InsightFace Evaluation Studio is a local desktop GUI for InsightFace 1.0. It is
+InsightFace Evaluation Studio is a local desktop GUI for InsightFace 1.0.1. It is
 designed for no-code face recognition testing, local People Library management,
 album organization, enterprise model evaluation, report export, and basic face
 swap trials.
@@ -191,8 +191,8 @@ Open **Album Management > Album** to add one or more album directories. Click
 and cluster all indexed faces from the selected directories. The page exposes a
 cosine similarity threshold with a default value of `0.48`; higher values make
 clusters stricter. DBSCAN internally receives cosine distance as
-`1 - cosine threshold`. If scikit-learn is not available, it falls back to a
-simple centroid grouping strategy and shows the algorithm used.
+`1 - cosine threshold`. The GUI extra installs scikit-learn for DBSCAN
+clustering.
 
 Album cluster IDs avoid duplicating existing People Library IDs. When a cluster
 matches an existing person within the configured duplicate distance threshold

@@ -3,12 +3,12 @@
 from __future__ import annotations
 
 APP_NAME = "InsightFace Evaluation Studio"
-APP_VERSION = "1.0"
+APP_VERSION = "1.0.1"
 APP_ORGANIZATION = "InsightFace"
 APP_DOMAIN = "insightface.ai"
 APP_ID = "ai.insightface.evaluationstudio"
 APP_PROCESS_NAME = APP_NAME
-WINDOW_TITLE = "InsightFace Evaluation Studio v1.0"
+WINDOW_TITLE = "InsightFace Evaluation Studio v1.0.1"
 SUBTITLE = (
     "Local face recognition, face search, photo organization, model evaluation, "
     "and face swap studio."

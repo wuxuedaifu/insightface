@@ -156,7 +156,7 @@ def refresh_model_assets(gui_cache_dir: str | os.PathLike[str], timeout: int = 2
         GITHUB_LATEST_RELEASE_API,
         headers={
             "Accept": "application/vnd.github+json",
-            "User-Agent": "InsightFace-Evaluation-Studio/1.0",
+            "User-Agent": "InsightFace-Evaluation-Studio/1.0.1",
         },
     )
     try:
@@ -265,7 +265,7 @@ def _download_with_retries(
         existing = partial.stat().st_size if partial.exists() else 0
         headers = {
             "Accept": "application/octet-stream,*/*",
-            "User-Agent": "Mozilla/5.0 InsightFace-Evaluation-Studio/1.0",
+            "User-Agent": "Mozilla/5.0 InsightFace-Evaluation-Studio/1.0.1",
         }
         if existing:
             headers["Range"] = f"bytes={existing}-"
