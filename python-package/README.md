@@ -113,6 +113,19 @@ More details:
 
 ## Change Log
 
+### [1.0] - 2026-05-23
+
+#### Added
+
+- Add **InsightFace Evaluation Studio**, a cross-platform PySide6 desktop GUI for local face recognition, album grouping, enterprise evaluation/report export, and face swap trials.
+- Add GUI launch commands: ``insightface-gui``, ``insightface-eval-studio``, ``insightface-desktop``, and ``python -m insightface.gui``.
+
+#### Changed
+
+- Default ``FaceAnalysis.prepare()`` detection size is now Auto, running SCRFD at both 128x128 and 640x640 before unified NMS.
+- Route detection models loaded by ``model_zoo.get_model()`` through ``SCRFD`` by default.
+- The optional ``face3d`` Cython/C++ extension is no longer built by default; use ``--with-face3d`` or ``INSIGHTFACE_WITH_FACE3D=1`` to opt in.
+
 ### [0.7.1] - 2022-12-14
   
 #### Changed
