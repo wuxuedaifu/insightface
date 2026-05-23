@@ -79,7 +79,7 @@ class PageRegistry:
             "batch_image_swap": (
                 "Batch Image Swap",
                 "Swap faces across a folder of images using the configured swap model.",
-                "Batch image swap is coming soon. Use Image Face Swap for single-image trials in v1.0.",
+                "Batch image swap is coming soon. Use Image Face Swap for single-image trials in v1.0.1.",
             ),
             "video_face_swap": (
                 "Video Face Swap",

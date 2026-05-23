@@ -55,30 +55,28 @@ requirements = [
     'opencv-python',
     'tqdm',
     'requests',
-    'matplotlib',
-    'Pillow',
     'scipy',
     #'opencv-python',
-    'scikit-learn',
     'scikit-image',
-    'easydict',
-    'prettytable',
 ]
 
 gui_requirements = [
     'PySide6-Essentials>=6.5',
+    'Pillow',
     'reportlab',
+    'scikit-learn',
 ]
 
 face3d_requirements = [
     'cython',
     'albumentations',
+    'matplotlib',
 ]
 
 package_data = {
     "insightface.data.images": ["*.jpg", "*.jpeg", "*.png"],
     "insightface.data.objects": ["*.pkl"],
-    "insightface.gui.assets": ["*.svg", "*.png", "*.ico", "*.icns"],
+    "insightface.gui.assets": ["*.png", "*.ico", "*.icns"],
 }
 
 packages = find_namespace_packages(
@@ -162,7 +160,6 @@ setup(
     description='InsightFace Python Library',
     long_description=long_description,
     long_description_content_type='text/markdown',
-    license='MIT',
     # Package info
     packages=packages,
     package_data=package_data,

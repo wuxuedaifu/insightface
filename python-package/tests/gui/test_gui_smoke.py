@@ -27,7 +27,7 @@ def test_main_window_smoke(tmp_path):
     assert app.applicationName() == "InsightFace Evaluation Studio"
     assert app.organizationName() == "InsightFace"
     assert app.organizationDomain() == "insightface.ai"
-    assert app.applicationVersion() == "1.0"
+    assert app.applicationVersion() == "1.0.1"
     assert APP_ID == "ai.insightface.evaluationstudio"
     assert APP_PROCESS_NAME == "InsightFace Evaluation Studio"
     assert app_icon_path().exists()

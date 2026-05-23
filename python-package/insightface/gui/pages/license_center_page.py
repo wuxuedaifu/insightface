@@ -7,6 +7,7 @@ from PySide6.QtWidgets import QLabel, QTableWidget, QTableWidgetItem
 from ..core.i18n import tr
 from ..core.links import open_insightface_url
 from ..core.licensing import allowed_usage_summary
+from ..core.constants import APP_VERSION
 from ..widgets.table_utils import configure_table_columns, refresh_table_columns
 from .base import BasePage
 
@@ -46,7 +47,7 @@ class LicenseCenterPage(BasePage):
                         "Code and model files may have different licenses, and commercial deployment requires appropriate model authorization.",
                         cfg.ui_language,
                     ),
-                    f"{tr('Current package', cfg.ui_language)}: insightface 1.0, GUI 1.0, "
+                    f"{tr('Current package', cfg.ui_language)}: insightface {APP_VERSION}, GUI {APP_VERSION}, "
                     f"{tr('Model', cfg.ui_language).lower()} {cfg.model_name}, "
                     f"{tr('Provider', cfg.ui_language).lower()} {cfg.provider}, "
                     f"{tr('License', cfg.ui_language).lower()} {tr(cfg.license_status, cfg.ui_language)}.",
