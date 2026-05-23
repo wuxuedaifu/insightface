@@ -80,11 +80,12 @@ jobs:
           assert "Requires-Dist: PySide6 " not in package_metadata
           assert "insightface/data/images/t1.jpg" in names
           assert "insightface/data/objects/meanshape_68.pkl" in names
-          assert "insightface/gui/assets/app_icon.svg" in names
           assert "insightface/gui/assets/app_icon.png" in names
           assert "insightface/gui/assets/app_icon.ico" in names
           assert "insightface/gui/assets/app_icon.icns" in names
-          assert any(name.endswith("insightface/gui/assets/app_icon.svg") for name in sdist_names)
+          assert any(name.endswith("insightface/gui/assets/app_icon.png") for name in sdist_names)
+          assert any(name.endswith("insightface/gui/assets/app_icon.ico") for name in sdist_names)
+          assert any(name.endswith("insightface/gui/assets/app_icon.icns") for name in sdist_names)
           assert not any(".data/data/insightface/data/" in name for name in names)
           assert not any(name.endswith((".so", ".pyd", ".dll", ".dylib")) for name in names)
 
