@@ -10,7 +10,7 @@ import glob
 import onnxruntime
 from .arcface_onnx import *
 from .retinaface import *
-#from .scrfd import *
+from .scrfd import *
 from .landmark import *
 from .attribute import Attribute
 from .inswapper import INSwapper
@@ -45,7 +45,7 @@ class ModelRouter:
         outputs = session.get_outputs()
 
         if len(outputs)>=5:
-            return RetinaFace(model_file=self.onnx_file, session=session)
+            return SCRFD(model_file=self.onnx_file, session=session)
         elif input_shape[2]==192 and input_shape[3]==192:
             return Landmark(model_file=self.onnx_file, session=session)
         elif input_shape[2]==96 and input_shape[3]==96:

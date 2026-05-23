@@ -14,6 +14,9 @@ import os.path as osp
 import cv2
 import sys
 
+DEFAULT_DET_SIZES = [(128, 128), (640, 640)]
+
+
 def softmax(z):
     assert len(z.shape) == 2
     s = np.max(z, axis=1)
@@ -93,8 +96,8 @@ class SCRFD:
             self.static_input_size = None
         else:
             self.static_input_size = tuple(input_shape[2:4][::-1])
-        self.input_size = self.static_input_size
-        self.input_sizes = [self.static_input_size] if self.static_input_size is not None else []
+        self.input_size = self.static_input_size if self.static_input_size is not None else DEFAULT_DET_SIZES[-1]
+        self.input_sizes = [self.static_input_size] if self.static_input_size is not None else list(DEFAULT_DET_SIZES)
         self._debug_det_size_printed = False
         #print('image_size:', self.image_size)
         input_name = input_cfg.name
@@ -311,7 +314,7 @@ class SCRFD:
             return list(self.input_sizes)
         if self.input_size is not None:
             return [self.input_size]
-        return []
+        return list(DEFAULT_DET_SIZES)
 
     @staticmethod
     def _normalize_input_sizes(input_size):
@@ -334,6 +337,11 @@ class SCRFD:
             if len(item) != 2:
                 raise ValueError('det_size must be a pair or a list of pairs')
             width, height = int(item[0]), int(item[1])
+            if width == 0 and height == 0:
+                for size in DEFAULT_DET_SIZES:
+                    if size not in sizes:
+                        sizes.append(size)
+                continue
             if width <= 0 or height <= 0:
                 raise ValueError('det_size values must be positive')
             size = (width, height)
