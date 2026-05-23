@@ -16,7 +16,115 @@ Starting from insightface>=0.2, we use onnxruntime as inference backend.
 
 You have to install ``onnxruntime-gpu`` manually to enable GPU inference, or install ``onnxruntime`` to use CPU only inference.
 
+### Install InsightFace Evaluation Studio GUI
+
+InsightFace 1.0 includes a local desktop GUI:
+
+```
+pip install "insightface[gui]"
+insightface-gui
+```
+
+Development install:
+
+```
+cd python-package
+pip install -e ".[gui]"
+insightface-gui
+```
+
+Equivalent launch commands:
+
+```
+insightface-eval-studio
+insightface-desktop
+python -m insightface.gui
+```
+
+The GUI is called **InsightFace Evaluation Studio**. It provides local 1:1 face
+compare, People Library management, 1:N face search, multi-face photo
+recognition, batch folder processing, album people clustering, enterprise
+evaluation reports, and a face swap entry point. User images, videos,
+embeddings, databases, and reports are stored locally by default under
+``~/.insightface/gui`` and are not uploaded automatically.
+Image and video previews are clickable upload targets: click
+``Click to upload or drag a file here`` or drop a file onto the preview. The
+preview changes color on hover and during drag-over. Loaded previews show a
+small delete button and can be replaced by dragging in another file.
+
+The desktop app uses mode-based navigation. Choose **Face Recognition**,
+**Album Management**, **Face Swap**, or **Enterprise Evaluation** from the
+persistent **Workflows** rail on the left side of the window. Face Recognition
+is a single **Query & Gallery** workspace: upload
+one query image and one gallery image for 1:1 compare, or upload multiple
+gallery images / a folder for 1:N gallery search. Album Management uses a
+single **Album** workspace for adding one or more folders, refreshing new
+images, DBSCAN clustering with a default cosine similarity threshold of `0.48`,
+and reviewing original photo thumbnails. Album directories and clustering results are saved
+locally for the next launch. Enterprise Evaluation is a single workspace for
+local 1:1 and 1:N identity-folder evaluation, Auto Split, metrics, and PDF
+report export. Enterprise datasets must pass validation before evaluation; the
+validator checks folder layout, gallery/probe rules, and the selected
+multi-face handling policy.
+Global utilities are available from the top bar and **Tools** menu:
+**Settings**, **Models**, and **License**. **Settings** controls the UI theme
+and language. Language defaults to the operating system when it is supported,
+otherwise English. Supported GUI languages are English, Chinese, Japanese,
+Korean, Spanish, French, German, Portuguese, and Russian. Available themes
+include System, Precision Light, Studio Dark, Graphite Pro, Azure Lab, Emerald
+Focus, and Crimson Audit. Workspace paths are chosen on first launch and are
+not changed from the settings dialog.
+
+Models are not downloaded automatically by the GUI. Open **Models > Downloads**,
+click **Refresh Download URLs** to read the latest GitHub Releases
+asset URLs, then explicitly download the selected package. Downloaded zip files
+are cached under ``~/.insightface/gui/cache/models`` and extracted under
+``~/.insightface/models/<model_name>/``.
+The Downloads tab also lists GFPGANv1.4 as a third-party face restoration
+model. After it is downloaded, enable **GFPGAN post-processing** in
+**Models > Runtime** to run 512x512 GFPGAN restoration after face swap.
+Detection size defaults to **Auto**, which runs joint 128x128 and 640x640
+detection. Face swap models are selected in **Models > Runtime** from already
+downloaded swap models only; the Face Swap workspace loads the configured swap
+model only when a swap is run.
+
+### Optional face3d Build
+
+InsightFace 1.0 does not build the optional ``face3d`` Cython/C++ extension by
+default. This keeps the default install lighter and avoids local compiler
+requirements. Users who need the legacy mask renderer / face3d path can opt in:
+
+```
+pip install -e ".[face3d]" --no-build-isolation --config-settings editable_mode=compat
+python setup.py build_ext --inplace --with-face3d
+```
+
+The same build can also be enabled with:
+
+```
+INSIGHTFACE_WITH_FACE3D=1 python setup.py build_ext --inplace
+```
+
+More details:
+
+- ``docs/gui.md``
+- ``docs/commercial_evaluation.md``
+- ``docs/gui_packaging.md``
+
 ## Change Log
+
+### [1.0] - 2026-05-23
+
+#### Added
+
+- Add **InsightFace Evaluation Studio**, a cross-platform PySide6 desktop GUI for local face recognition, album grouping, enterprise evaluation/report export, and face swap trials.
+- Add GUI launch commands: ``insightface-gui``, ``insightface-eval-studio``, ``insightface-desktop``, and ``python -m insightface.gui``.
+
+#### Changed
+
+- Default ``FaceAnalysis.prepare()`` detection size is now Auto, running SCRFD at both 128x128 and 640x640 before unified NMS.
+- Route detection models loaded by ``model_zoo.get_model()`` through ``SCRFD`` by default.
+- The optional ``face3d`` Cython/C++ extension is no longer built by default; use ``--with-face3d`` or ``INSIGHTFACE_WITH_FACE3D=1`` to opt in.
 
 ### [0.7.1] - 2022-12-14
   
@@ -55,7 +163,7 @@ from insightface.app import FaceAnalysis
 from insightface.data import get_image as ins_get_image
 
 app = FaceAnalysis(providers=['CUDAExecutionProvider', 'CPUExecutionProvider'])
-app.prepare(ctx_id=0, det_size=(640, 640))
+app.prepare(ctx_id=0)  # Auto detection size: 128x128 + 640x640
 img = ins_get_image('t1')
 faces = app.get(img)
 rimg = app.draw_on(img, faces)
@@ -128,11 +236,11 @@ from insightface.data import get_image as ins_get_image
 
 # Method-1, use FaceAnalysis
 app = FaceAnalysis(allowed_modules=['detection']) # enable detection model only
-app.prepare(ctx_id=0, det_size=(640, 640))
+app.prepare(ctx_id=0) # Auto detection size: 128x128 + 640x640
 
 # Method-2, load model directly
 detector = insightface.model_zoo.get_model('your_detection_model.onnx')
-detector.prepare(ctx_id=0, input_size=(640, 640))
+detector.prepare(ctx_id=0) # SCRFD defaults to Auto: 128x128 + 640x640
 
 ```
 
@@ -149,5 +257,3 @@ handler = insightface.model_zoo.get_model('your_recognition_model.onnx')
 handler.prepare(ctx_id=0)
 
 ```
-
-

@@ -13,7 +13,7 @@ assert insightface.__version__>='0.7'
 
 if __name__ == '__main__':
     app = FaceAnalysis(name='buffalo_l')
-    app.prepare(ctx_id=0, det_size=(640, 640))
+    app.prepare(ctx_id=0)
     swapper = insightface.model_zoo.get_model('inswapper_128.onnx', download=True, download_zip=True)
 
 
@@ -32,5 +32,4 @@ if __name__ == '__main__':
         res.append(_img)
     res = np.concatenate(res, axis=1)
     cv2.imwrite("./t1_swapped2.jpg", res)
-
 
