@@ -24,10 +24,10 @@ APP_ICON_ICNS = ASSET_DIR / "app_icon.icns"
 def app_icon_path() -> Path:
     """Return the best available runtime icon path."""
 
-    for path in (APP_ICON_SVG, APP_ICON_PNG, APP_ICON_ICO, APP_ICON_ICNS):
+    for path in (APP_ICON_PNG, APP_ICON_ICO, APP_ICON_ICNS, APP_ICON_SVG):
         if path.exists():
             return path
-    return APP_ICON_SVG
+    return APP_ICON_PNG
 
 
 def app_icon():
@@ -37,7 +37,7 @@ def app_icon():
         from PySide6.QtGui import QIcon
     except Exception:
         return None
-    for path in (APP_ICON_SVG, APP_ICON_PNG, APP_ICON_ICO, APP_ICON_ICNS):
+    for path in (APP_ICON_PNG, APP_ICON_ICO, APP_ICON_ICNS, APP_ICON_SVG):
         if not path.exists():
             continue
         icon = QIcon(str(path))
