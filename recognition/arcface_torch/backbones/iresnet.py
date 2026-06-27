@@ -68,7 +68,8 @@ class IResNet(nn.Module):
     fc_scale = 7 * 7
     def __init__(self,
                  block, layers, dropout=0, num_features=512, zero_init_residual=False,
-                 groups=1, width_per_group=64, replace_stride_with_dilation=None, fp16=False):
+                 groups=1, width_per_group=64, replace_stride_with_dilation=None, fp16=False,
+                 norm_output=False):
         super(IResNet, self).__init__()
         self.extra_gflops = 0.0
         self.fp16 = fp16
@@ -106,6 +107,7 @@ class IResNet(nn.Module):
         self.features = nn.BatchNorm1d(num_features, eps=1e-05)
         nn.init.constant_(self.features.weight, 1.0)
         self.features.weight.requires_grad = False
+        self.norm_output = norm_output
 
         for m in self.modules():
             if isinstance(m, nn.Conv2d):
@@ -159,6 +161,10 @@ class IResNet(nn.Module):
             x = self.dropout(x)
         x = self.fc(x.float() if self.fp16 else x)
         x = self.features(x)
+        if self.norm_output:
+            norm = torch.norm(x, 2, 1, True)
+            x = torch.div(x, norm)
+            return x, norm
         return x
 
 
