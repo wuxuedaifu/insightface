@@ -98,3 +98,62 @@ class CosFace(torch.nn.Module):
         logits[index, labels[index].view(-1)] = final_target_logit
         logits = logits * self.s
         return logits
+
+
+class AdaFaceLoss(torch.nn.Module):
+    """Adaptive margin loss from AdaFace (https://arxiv.org/abs/2204.09949).
+
+    Adjusts angular and additive margins per sample based on the feature norm,
+    which serves as a proxy for image quality. High-norm samples receive a
+    tighter margin; low-norm samples are penalised less.
+    """
+
+    def __init__(self, m: float = 0.4, h: float = 0.333,
+                 s: float = 64.0, t_alpha: float = 0.01):
+        super().__init__()
+        self.m = m
+        self.h = h
+        self.s = s
+        self.t_alpha = t_alpha
+        self.eps = 1e-3
+        self.register_buffer('batch_mean', torch.ones(1) * 20.0)
+        self.register_buffer('batch_std',  torch.ones(1) * 100.0)
+
+    def forward(self, logits: torch.Tensor, norms: torch.Tensor,
+                labels: torch.Tensor) -> torch.Tensor:
+        """
+        Args:
+            logits: cosine similarities, shape (N, C), values in (-1, 1)
+            norms:  feature L2 norms, shape (N, 1)
+            labels: class indices, shape (N, 1); -1 means no local positive class
+        Returns:
+            scaled logits with adaptive margin applied, shape (N, C)
+        """
+        index_positive = torch.where(labels.view(-1) != -1)[0]
+
+        safe_norms = torch.clip(norms.view(-1), min=0.001, max=100).detach()
+
+        with torch.no_grad():
+            mean = safe_norms.mean()
+            std  = safe_norms.std()
+            self.batch_mean = mean * self.t_alpha + (1 - self.t_alpha) * self.batch_mean
+            self.batch_std  = std  * self.t_alpha + (1 - self.t_alpha) * self.batch_std
+
+        margin_scaler = (safe_norms - self.batch_mean) / (self.batch_std + self.eps)
+        margin_scaler = torch.clip(margin_scaler * self.h, -1, 1)
+
+        # Angular margin
+        g_angular = self.m * margin_scaler[index_positive] * -1
+        m_arc = torch.zeros_like(logits)
+        m_arc[index_positive, labels[index_positive].view(-1)] = g_angular
+        theta   = logits.acos()
+        theta_m = torch.clip(theta + m_arc, min=self.eps, max=math.pi - self.eps)
+        logits  = theta_m.cos()
+
+        # Additive margin
+        g_add = self.m + self.m * margin_scaler[index_positive]
+        m_cos = torch.zeros_like(logits)
+        m_cos[index_positive, labels[index_positive].view(-1)] = g_add
+        logits = logits - m_cos
+
+        return logits * self.s
