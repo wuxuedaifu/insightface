@@ -88,5 +88,23 @@ def get_model(name, **kwargs):
             img_size=112, patch_size=9, num_classes=num_features, embed_dim=1024, depth=48,
             num_heads=8, drop_path_rate=0.1, norm_layer="ln", mask_ratio=0, using_checkpoint=True)
 
+    elif name == "mamba_s":
+        num_features = kwargs.get("num_features", 512)
+        from .mamba_vit import MambaVit
+        return MambaVit(stage_dims=(128, 256), num_mamba_blocks=12,
+                        d_state=16, num_classes=num_features)
+
+    elif name == "mamba_b":
+        num_features = kwargs.get("num_features", 512)
+        from .mamba_vit import MambaVit
+        return MambaVit(stage_dims=(256, 512), num_mamba_blocks=24,
+                        d_state=16, num_classes=num_features)
+
+    elif name == "mamba_l":
+        num_features = kwargs.get("num_features", 512)
+        from .mamba_vit import MambaVit
+        return MambaVit(stage_dims=(384, 768), num_mamba_blocks=24,
+                        d_state=16, num_classes=num_features)
+
     else:
         raise ValueError()
