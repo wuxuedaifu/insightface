@@ -190,6 +190,116 @@ More details see
 | 29000000                        | **-**         | **-**          | 32324          |
 
 
+## New Methods (2026)
+
+### AdaFace — Quality-Adaptive Margin Loss
+
+Paper: [AdaFace: Quality Adaptive Margin for Face Recognition](https://arxiv.org/abs/2204.09949) (CVPR 2022)
+
+Uses the feature L2 norm as an image quality proxy to adaptively scale per-sample training margins: high-quality (high-norm) samples receive a tighter margin; low-quality samples are penalised less. An EMA running estimate of the batch norm distribution normalises the scaler.
+
+**New files:**
+- `losses.py` → `AdaFaceLoss` class
+- `partial_fc_v2.py` → `PartialFC_V2_AdaFace` (all-gathers norms across GPUs)
+- `train_adaface.py` — training entry point
+- `configs/ms1mv3_adaface_r50.py`, `configs/ms1mv3_adaface_r100.py`
+
+**IResNet backbone change:** pass `norm_output=True` to `get_model` and the backbone returns an `(embedding, norm)` tuple.
+
+```shell
+torchrun --nproc_per_node=8 train_adaface.py configs/ms1mv3_adaface_r50
+```
+
+Key config parameters: `adaface_m` (margin, default 0.4), `adaface_h` (scaler clip, default 0.333), `adaface_s` (scale, default 64), `adaface_t_alpha` (EMA rate, default 0.01).
+
+---
+
+### TransFace — FFT Amplitude Augmentation
+
+Paper: [TransFace: Calibrating Transformer Training for Face Recognition from a Data-Centric Perspective](https://arxiv.org/abs/2308.10133) (ICCV 2023)
+
+An online data augmentation that selectively applies low-frequency amplitude blending to the least-discriminative patches in each training batch. The ViT backbone emits per-patch attention entropy to guide which images are augmented.
+
+**New files:**
+- `augmentation/fft_mix.py` → `amplitude_spectrum_mix(src, ref, ratio)` — blends amplitude spectra, preserves src phase
+- `backbones/transface_vit.py` → `TransFaceViT` subclass of `VisionTransformer`:
+  - **Train mode:** `forward(x)` → `(embedding, patch_entropy)` where `patch_entropy` shape is `(B,)`
+  - **Eval mode:** `forward(x)` → `embedding` (identical to base ViT)
+- `train_transface.py` — training entry point with entropy-guided FFT loop
+- `configs/ms1mv3_transface_vit_b.py`, `configs/ms1mv3_transface_vit_l.py`
+
+**New `get_model` names:** `transface_vit_b`, `transface_vit_l`
+
+```shell
+torchrun --nproc_per_node=8 train_transface.py configs/ms1mv3_transface_vit_b
+```
+
+Key config parameters: `fft_prob` (probability of augmenting each step, default 0.2), `fft_ratio` (fraction of spectrum to blend, default 0.1).
+
+---
+
+### MambaVision — Hybrid CNN + SSM Backbone
+
+Inspired by [MambaVision](https://github.com/NVlabs/MambaVision) (NeurIPS 2024). A face-adapted hybrid backbone combining strided CNN stages for local feature extraction with Mamba (S6 selective state space) blocks for long-range sequence modelling over patch tokens.
+
+```
+112×112 input
+  → Stage 1: CNN (3→C, stride 2×2) → 56×56
+  → Stage 2: CNN (C→2C, stride 2×2) → 28×28 = 784 patch tokens
+  → N × MambaBlock(2C)
+  → Global average pool → Linear(2C→512) → BN → Linear(512→D) → BN
+```
+
+Pure PyTorch selective scan — no `mamba_ssm` CUDA package required. For production GPU training, replace `_selective_scan` in `backbones/mamba_vit.py` with `mamba_ssm` kernels for 10–100× speedup.
+
+**New `get_model` names:**
+
+| Name | SSM dim | Mamba blocks | ~Params |
+|------|---------|-------------|---------|
+| `mamba_s` | 256 | 12 | 7M |
+| `mamba_b` | 512 | 24 | 90M |
+| `mamba_l` | 768 | 24 | 190M |
+
+**New configs:** `configs/ms1mv3_mamba_b.py`, `configs/ms1mv3_mamba_l.py`
+
+```shell
+torchrun --nproc_per_node=8 train_v2.py configs/ms1mv3_mamba_b
+```
+
+---
+
+### Large-ViT Configs (LVFace-style)
+
+The existing `VisionTransformer` backbone (ViT-B/L/H) is already implemented. New MS1MV3 configs enable training with AdamW, matching the large-scale setup from [LVFace](https://github.com/bytedance/LVFace):
+
+| Config | Backbone | Embed dim | Depth |
+|--------|----------|-----------|-------|
+| `ms1mv3_vit_b` | `vit_b_dp005_mask_005` | 512 | 24 |
+| `ms1mv3_vit_l` | `vit_l_dp005_mask_005` | 768 | 24 |
+| `ms1mv3_vit_h` | `vit_h` | 1024 | 48 |
+
+```shell
+torchrun --nproc_per_node=8 train_v2.py configs/ms1mv3_vit_h
+```
+
+---
+
+### UIFace — Diffusion-Based Synthetic Face Generation
+
+Source: [TFace](https://github.com/Tencent/TFace). A VQ-GAN + DDPM generation pipeline that synthesises diverse training faces conditioned on identity embeddings.
+
+Located in `recognition/uiface/`. See `recognition/uiface/requirements.txt` for dependencies.
+
+```shell
+# Train the diffusion model
+python recognition/uiface/main.py
+
+# Sample synthetic faces
+python recognition/uiface/sample.py
+```
+
+---
+
 ## Citations
 
 ```
