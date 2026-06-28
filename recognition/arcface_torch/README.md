@@ -1,294 +1,147 @@
-# Distributed Arcface Training in Pytorch
+# Distributed ArcFace Training in PyTorch
 
-The "arcface_torch" repository is the official implementation of the ArcFace algorithm. It supports distributed and sparse training with multiple distributed training examples, including several memory-saving techniques such as mixed precision training and gradient checkpointing. It also supports training for ViT models and datasets including WebFace42M and Glint360K, two of the largest open-source datasets. Additionally, the repository comes with a built-in tool for converting to ONNX format, making it easy to submit to MFR evaluation systems.
+This repository is the official implementation of **ArcFace** with distributed and sparse training support. It has been extended with four new methods: **AdaFace** (quality-adaptive margin), **TransFace** (FFT amplitude augmentation), **MambaVision** (hybrid CNN+SSM backbone), and **UIFace** (diffusion-based synthetic face generation).
 
-[![PWC](https://img.shields.io/endpoint.svg?url=https://paperswithcode.com/badge/killing-two-birds-with-one-stone-efficient/face-verification-on-ijb-c)](https://paperswithcode.com/sota/face-verification-on-ijb-c?p=killing-two-birds-with-one-stone-efficient)  
-[![PWC](https://img.shields.io/endpoint.svg?url=https://paperswithcode.com/badge/killing-two-birds-with-one-stone-efficient/face-verification-on-ijb-b)](https://paperswithcode.com/sota/face-verification-on-ijb-b?p=killing-two-birds-with-one-stone-efficient)  
-[![PWC](https://img.shields.io/endpoint.svg?url=https://paperswithcode.com/badge/killing-two-birds-with-one-stone-efficient/face-verification-on-agedb-30)](https://paperswithcode.com/sota/face-verification-on-agedb-30?p=killing-two-birds-with-one-stone-efficient)  
+[![PWC](https://img.shields.io/endpoint.svg?url=https://paperswithcode.com/badge/killing-two-birds-with-one-stone-efficient/face-verification-on-ijb-c)](https://paperswithcode.com/sota/face-verification-on-ijb-c?p=killing-two-birds-with-one-stone-efficient)
+[![PWC](https://img.shields.io/endpoint.svg?url=https://paperswithcode.com/badge/killing-two-birds-with-one-stone-efficient/face-verification-on-ijb-b)](https://paperswithcode.com/sota/face-verification-on-ijb-b?p=killing-two-birds-with-one-stone-efficient)
+[![PWC](https://img.shields.io/endpoint.svg?url=https://paperswithcode.com/badge/killing-two-birds-with-one-stone-efficient/face-verification-on-agedb-30)](https://paperswithcode.com/sota/face-verification-on-agedb-30?p=killing-two-birds-with-one-stone-efficient)
 [![PWC](https://img.shields.io/endpoint.svg?url=https://paperswithcode.com/badge/killing-two-birds-with-one-stone-efficient/face-verification-on-cfp-fp)](https://paperswithcode.com/sota/face-verification-on-cfp-fp?p=killing-two-birds-with-one-stone-efficient)
+
+---
 
 ## Requirements
 
-To avail the latest features of PyTorch, we have upgraded to version 1.12.0.
+- PyTorch >= 1.12.0 — see [installation guide](https://pytorch.org/get-started/previous-versions/)
+- (Optional) [DALI](https://docs.nvidia.com/deeplearning/dali/user-guide/docs/) for fast data loading — see [install_dali.md](docs/install_dali.md)
+- `pip install -r requirement.txt`
 
-- Install [PyTorch](https://pytorch.org/get-started/previous-versions/) (torch>=1.12.0).
-- (Optional) Install [DALI](https://docs.nvidia.com/deeplearning/dali/user-guide/docs/), our doc for [install_dali.md](docs/install_dali.md).
-- `pip install -r requirement.txt`.
-  
-## How to Training
+---
 
-To train a model, execute the `train_v2.py` script with the path to the configuration files. The sample commands provided below demonstrate the process of conducting distributed training.
+## Backbones
 
-### 1. To run on one GPU:
+All backbones are registered in `backbones/__init__.py` and accessed via `get_model(name)`.
+
+### IResNet (CNN)
+
+| Name | Params | GFLOPs |
+|------|--------|--------|
+| `r18` | 24M | 2.6 |
+| `r34` | 43M | 3.7 |
+| `r50` | 43M | 6.3 |
+| `r100` | 65M | 12.1 |
+| `r200` | 62M | 23.5 |
+| `r2060` | 62M | — |
+| `mbf` / `mbf_large` | — | — |
+
+### Vision Transformer (ViT)
+
+| Name | Embed dim | Depth | Notes |
+|------|-----------|-------|-------|
+| `vit_t` | 256 | 12 | |
+| `vit_s` | 512 | 12 | |
+| `vit_b` | 512 | 24 | gradient checkpointing |
+| `vit_b_dp005_mask_005` | 512 | 24 | WebFace42M / LVFace-style |
+| `vit_l_dp005_mask_005` | 768 | 24 | WebFace42M / LVFace-style |
+| `vit_h` | 1024 | 48 | gradient checkpointing |
+
+### TransFaceViT *(new)*
+
+Drop-in ViT replacement that emits per-patch attention entropy during training for FFT-guided augmentation. At eval time it returns a plain embedding identical to the base ViT.
+
+| Name | Embed dim | Depth |
+|------|-----------|-------|
+| `transface_vit_b` | 512 | 24 |
+| `transface_vit_l` | 768 | 24 |
+
+### MambaVision *(new)*
+
+Hybrid CNN + Mamba (S6 selective state space) backbone for 112×112 face recognition. CNN stages reduce spatial resolution to 28×28 patch tokens; Mamba blocks then do long-range sequence modelling. Pure-PyTorch selective scan — no `mamba_ssm` CUDA package required (install it for 10–100× faster training on GPU).
+
+```
+112×112 → Stage1 CNN (3→C, /2) → 56×56
+        → Stage2 CNN (C→2C, /2) → 28×28 = 784 tokens
+        → N × MambaBlock(2C)
+        → Global avg pool → Linear→BN→Linear→BN → 512-d embedding
+```
+
+| Name | CNN dims | SSM dim | Mamba blocks | ~Params |
+|------|----------|---------|-------------|---------|
+| `mamba_s` | 128→256 | 256 | 12 | 7M |
+| `mamba_b` | 256→512 | 512 | 24 | 90M |
+| `mamba_l` | 384→768 | 768 | 24 | 190M |
+
+---
+
+## Loss Functions
+
+### ArcFace / CosFace / Combined Margin
+
+Standard `CombinedMarginLoss` with `PartialFC_V2`. Used by `train_v2.py`.
+
+### AdaFace *(new)*
+
+Uses the feature L2 norm as an image quality proxy. High-norm (high-quality) samples receive a tighter margin; low-norm samples are penalised less. An EMA running estimate of the batch-norm distribution normalises the per-sample scaler.
+
+**API change:** set `norm_output=True` on IResNet and the backbone returns an `(embedding, norm)` tuple. `PartialFC_V2_AdaFace` all-gathers norms across GPUs before computing the loss.
+
+Key hyperparameters: `adaface_m` (margin, default 0.4), `adaface_h` (scaler clip, default 0.333), `adaface_s` (logit scale, default 64), `adaface_t_alpha` (EMA rate, default 0.01).
+
+---
+
+## Training
+
+### Standard ArcFace / ViT / MambaVision
 
 ```shell
+# Single GPU
 python train_v2.py configs/ms1mv3_r50_onegpu
-```
 
-Note:   
-It is not recommended to use a single GPU for training, as this may result in longer training times and suboptimal performance. For best results, we suggest using multiple GPUs or a GPU cluster.  
-
-
-### 2. To run on a machine with 8 GPUs:
-
-```shell
+# 8 GPUs, single machine
 torchrun --nproc_per_node=8 train_v2.py configs/ms1mv3_r50
-```
 
-### 3. To run on 2 machines with 8 GPUs each:
+# Multi-machine (2 nodes × 8 GPUs)
+# Node 0
+torchrun --nproc_per_node=8 --nnodes=2 --node_rank=0 --master_addr="ip1" --master_port=12581 \
+    train_v2.py configs/wf42m_pfc02_16gpus_r100
+# Node 1
+torchrun --nproc_per_node=8 --nnodes=2 --node_rank=1 --master_addr="ip1" --master_port=12581 \
+    train_v2.py configs/wf42m_pfc02_16gpus_r100
 
-Node 0:
-
-```shell
-torchrun --nproc_per_node=8 --nnodes=2 --node_rank=0 --master_addr="ip1" --master_port=12581 train_v2.py configs/wf42m_pfc02_16gpus_r100
-```
-
-Node 1:
-  
-```shell
-torchrun --nproc_per_node=8 --nnodes=2 --node_rank=1 --master_addr="ip1" --master_port=12581 train_v2.py configs/wf42m_pfc02_16gpus_r100
-```
-
-### 4. Run ViT-B on a machine with 24k batchsize:
-
-```shell
+# ViT-B (24k batch)
 torchrun --nproc_per_node=8 train_v2.py configs/wf42m_pfc03_40epoch_8gpu_vit_b
 ```
 
+Available configs for the new backbones:
 
-## Download Datasets or Prepare Datasets  
-- [MS1MV2](https://github.com/deepinsight/insightface/tree/master/recognition/_datasets_#ms1m-arcface-85k-ids58m-images-57) (87k IDs, 5.8M images)
-- [MS1MV3](https://github.com/deepinsight/insightface/tree/master/recognition/_datasets_#ms1m-retinaface) (93k IDs, 5.2M images)
-- [Glint360K](https://github.com/deepinsight/insightface/tree/master/recognition/partial_fc#4-download) (360k IDs, 17.1M images)
-- [WebFace42M](docs/prepare_webface42m.md) (2M IDs, 42.5M images)
-- [Your Dataset, Click Here!](docs/prepare_custom_dataset.md)
+| Config | Backbone | Optimizer |
+|--------|----------|-----------|
+| `configs/ms1mv3_vit_b` | `vit_b_dp005_mask_005` | AdamW |
+| `configs/ms1mv3_vit_l` | `vit_l_dp005_mask_005` | AdamW |
+| `configs/ms1mv3_vit_h` | `vit_h` | AdamW |
+| `configs/ms1mv3_mamba_b` | `mamba_b` | AdamW |
+| `configs/ms1mv3_mamba_l` | `mamba_l` | AdamW |
 
-Note: 
-If you want to use DALI for data reading, please use the script 'scripts/shuffle_rec.py' to shuffle the InsightFace style rec before using it.  
-Example:
-
-`python scripts/shuffle_rec.py ms1m-retinaface-t1`
-
-You will get the "shuffled_ms1m-retinaface-t1" folder, where the samples in the "train.rec" file are shuffled.
-
-
-## Model Zoo
-
-- The models are available for non-commercial research purposes only.  
-- All models can be found in here.  
-- [Baidu Yun Pan](https://pan.baidu.com/s/1CL-l4zWqsI1oDuEEYVhj-g): e8pw  
-- [OneDrive](https://1drv.ms/u/s!AswpsDO2toNKq0lWY69vN58GR6mw?e=p9Ov5d)
-
-### Performance on IJB-C and [**ICCV2021-MFR**](https://github.com/deepinsight/insightface/blob/master/challenges/mfr/README.md)
-
-ICCV2021-MFR testset consists of non-celebrities so we can ensure that it has very few overlap with public available face 
-recognition training set, such as MS1M and CASIA as they mostly collected from online celebrities. 
-As the result, we can evaluate the FAIR performance for different algorithms.  
-
-For **ICCV2021-MFR-ALL** set, TAR is measured on all-to-all 1:1 protocal, with FAR less than 0.000001(e-6). The 
-globalised multi-racial testset contains 242,143 identities and 1,624,305 images. 
-
-
-#### 1. Training on Single-Host GPU
-
-| Datasets       | Backbone            | **MFR-ALL** | IJB-C(1E-4) | IJB-C(1E-5) | log                                                                                                                                 |
-|:---------------|:--------------------|:------------|:------------|:------------|:------------------------------------------------------------------------------------------------------------------------------------|
-| MS1MV2         | mobilefacenet-0.45G | 62.07       | 93.61       | 90.28       | [click me](https://raw.githubusercontent.com/anxiangsir/insightface_arcface_log/master/ms1mv2_mbf/training.log)                     |
-| MS1MV2         | r50                 | 75.13       | 95.97       | 94.07       | [click me](https://raw.githubusercontent.com/anxiangsir/insightface_arcface_log/master/ms1mv2_r50/training.log)                     |
-| MS1MV2         | r100                | 78.12       | 96.37       | 94.27       | [click me](https://raw.githubusercontent.com/anxiangsir/insightface_arcface_log/master/ms1mv2_r100/training.log)                    |
-| MS1MV3         | mobilefacenet-0.45G | 63.78       | 94.23       | 91.33       | [click me](https://raw.githubusercontent.com/anxiangsir/insightface_arcface_log/master/ms1mv3_mbf/training.log)                     |
-| MS1MV3         | r50                 | 79.14       | 96.37       | 94.47       | [click me](https://raw.githubusercontent.com/anxiangsir/insightface_arcface_log/master/ms1mv3_r50/training.log)                     |
-| MS1MV3         | r100                | 81.97       | 96.85       | 95.02       | [click me](https://raw.githubusercontent.com/anxiangsir/insightface_arcface_log/master/ms1mv3_r100/training.log)                    |
-| Glint360K      | mobilefacenet-0.45G | 70.18       | 95.04       | 92.62       | [click me](https://raw.githubusercontent.com/anxiangsir/insightface_arcface_log/master/glint360k_mbf/training.log)                  |
-| Glint360K      | r50                 | 86.34       | 97.16       | 95.81       | [click me](https://raw.githubusercontent.com/anxiangsir/insightface_arcface_log/master/glint360k_r50/training.log)                  |
-| Glint360k      | r100                | 89.52       | 97.55       | 96.38       | [click me](https://raw.githubusercontent.com/anxiangsir/insightface_arcface_log/master/glint360k_r100/training.log)                 |
-| WF4M           | r100                | 89.87       | 97.19       | 95.48       | [click me](https://raw.githubusercontent.com/anxiangsir/insightface_arcface_log/master/wf4m_r100/training.log)                      |
-| WF12M-PFC-0.2  | r100                | 94.75       | 97.60       | 95.90       | [click me](https://raw.githubusercontent.com/anxiangsir/insightface_arcface_log/master/wf12m_pfc02_r100/training.log)               |
-| WF12M-PFC-0.3  | r100                | 94.71       | 97.64       | 96.01       | [click me](https://raw.githubusercontent.com/anxiangsir/insightface_arcface_log/master/wf12m_pfc03_r100/training.log)               |
-| WF12M          | r100                | 94.69       | 97.59       | 95.97       | [click me](https://raw.githubusercontent.com/anxiangsir/insightface_arcface_log/master/wf12m_r100/training.log)                     |
-| WF42M-PFC-0.2  | r100                | 96.27       | 97.70       | 96.31       | [click me](https://raw.githubusercontent.com/anxiangsir/insightface_arcface_log/master/wf42m_pfc02_r100/training.log)               |
-| WF42M-PFC-0.2  | ViT-T-1.5G          | 92.04       | 97.27       | 95.68       | [click me](https://raw.githubusercontent.com/anxiangsir/insightface_arcface_log/master/wf42m_pfc02_40epoch_8gpu_vit_t/training.log) |
-| WF42M-PFC-0.3  | ViT-B-11G           | 97.16       | 97.91       | 97.05       | [click me](https://raw.githubusercontent.com/anxiangsir/insightface_arcface_log/master/pfc03_wf42m_vit_b_8gpu/training.log)         |
-
-#### 2. Training on Multi-Host GPU
-
-| Datasets         | Backbone(bs*gpus) | **MFR-ALL** | IJB-C(1E-4) | IJB-C(1E-5) | Throughout | log                                                                                                                                        |
-|:-----------------|:------------------|:------------|:------------|:------------|:-----------|:-------------------------------------------------------------------------------------------------------------------------------------------|
-| WF42M-PFC-0.2    | r50(512*8)        | 93.83       | 97.53       | 96.16       | ~5900      | [click me](https://raw.githubusercontent.com/anxiangsir/insightface_arcface_log/master/webface42m_r50_bs4k_pfc02/training.log)             |
-| WF42M-PFC-0.2    | r50(512*16)       | 93.96       | 97.46       | 96.12       | ~11000     | [click me](https://raw.githubusercontent.com/anxiangsir/insightface_arcface_log/master/webface42m_r50_lr01_pfc02_bs8k_16gpus/training.log) |
-| WF42M-PFC-0.2    | r50(128*32)       | 94.04       | 97.48       | 95.94       | ~17000     | click me                                                                                                                                   |
-| WF42M-PFC-0.2    | r100(128*16)      | 96.28       | 97.80       | 96.57       | ~5200      | click me                                                                                                                                   |
-| WF42M-PFC-0.2    | r100(256*16)      | 96.69       | 97.85       | 96.63       | ~5200      | [click me](https://raw.githubusercontent.com/anxiangsir/insightface_arcface_log/master/webface42m_r100_bs4k_pfc02/training.log)            |
-| WF42M-PFC-0.0018 | r100(512*32)      | 93.08       | 97.51       | 95.88       | ~10000     | click me                                                                                                                                   |
-| WF42M-PFC-0.2    | r100(128*32)      | 96.57       | 97.83       | 96.50       | ~9800      | click me                                                                                                                                   |
-
-`r100(128*32)` means backbone is r100, batchsize per gpu is 128, the number of gpus is 32.
-
-
-
-#### 3. ViT For Face Recognition
-
-| Datasets      | Backbone(bs)  | FLOPs | **MFR-ALL** | IJB-C(1E-4) | IJB-C(1E-5) | Throughout | log                                                                                                                          |
-|:--------------|:--------------|:------|:------------|:------------|:------------|:-----------|:-----------------------------------------------------------------------------------------------------------------------------|
-| WF42M-PFC-0.3 | r18(128*32)   | 2.6   | 79.13       | 95.77       | 93.36       | -          | click me                                                                                                                     |
-| WF42M-PFC-0.3 | r50(128*32)   | 6.3   | 94.03       | 97.48       | 95.94       | -          | click me                                                                                                                     |
-| WF42M-PFC-0.3 | r100(128*32)  | 12.1  | 96.69       | 97.82       | 96.45       | -          | click me                                                                                                                     |
-| WF42M-PFC-0.3 | r200(128*32)  | 23.5  | 97.70       | 97.97       | 96.93       | -          | click me                                                                                                                     |
-| WF42M-PFC-0.3 | VIT-T(384*64) | 1.5   | 92.24       | 97.31       | 95.97       | ~35000     | click me                                                                                                                     |
-| WF42M-PFC-0.3 | VIT-S(384*64) | 5.7   | 95.87       | 97.73       | 96.57       | ~25000     | [click me](https://raw.githubusercontent.com/anxiangsir/insightface_arcface_log/master/pfc03_wf42m_vit_s_64gpu/training.log) |
-| WF42M-PFC-0.3 | VIT-B(384*64) | 11.4  | 97.42       | 97.90       | 97.04       | ~13800     | [click me](https://raw.githubusercontent.com/anxiangsir/insightface_arcface_log/master/pfc03_wf42m_vit_b_64gpu/training.log) |
-| WF42M-PFC-0.3 | VIT-L(384*64) | 25.3  | 97.85       | 98.00       | 97.23       | ~9406      | [click me](https://raw.githubusercontent.com/anxiangsir/insightface_arcface_log/master/pfc03_wf42m_vit_l_64gpu/training.log) |
-
-`WF42M` means WebFace42M, `PFC-0.3` means negivate class centers sample rate is 0.3.
-
-#### 4. Noisy Datasets
-  
-| Datasets                 | Backbone | **MFR-ALL** | IJB-C(1E-4) | IJB-C(1E-5) | log      |
-|:-------------------------|:---------|:------------|:------------|:------------|:---------|
-| WF12M-Flip(40%)          | r50      | 43.87       | 88.35       | 80.78       | click me |
-| WF12M-Flip(40%)-PFC-0.1* | r50      | 80.20       | 96.11       | 93.79       | click me |
-| WF12M-Conflict           | r50      | 79.93       | 95.30       | 91.56       | click me |
-| WF12M-Conflict-PFC-0.3*  | r50      | 91.68       | 97.28       | 95.75       | click me |
-
-`WF12M` means WebFace12M, `+PFC-0.1*` denotes additional abnormal inter-class filtering.
-
-
-
-## Speed Benchmark
-<div><img src="https://github.com/anxiangsir/insightface_arcface_log/blob/master/pfc_exp.png" width = "90%" /></div>
-
-
-**Arcface-Torch** is an efficient tool for training large-scale face recognition training sets. When the number of classes in the training sets exceeds one million, the partial FC sampling strategy maintains the same accuracy while providing several times faster training performance and lower GPU memory utilization. The partial FC is a sparse variant of the model parallel architecture for large-scale face recognition, utilizing a sparse softmax that dynamically samples a subset of class centers for each training batch. During each iteration, only a sparse portion of the parameters are updated, leading to a significant reduction in GPU memory requirements and computational demands. With the partial FC approach, it is possible to train sets with up to 29 million identities, the largest to date. Furthermore, the partial FC method supports multi-machine distributed training and mixed precision training.
-
-
-
-More details see 
-[speed_benchmark.md](docs/speed_benchmark.md) in docs.
-
-> 1. Training Speed of Various Parallel Techniques (Samples per Second) on a Tesla V100 32GB x 8 System (Higher is Optimal)
-
-`-` means training failed because of gpu memory limitations.
-
-| Number of Identities in Dataset | Data Parallel | Model Parallel | Partial FC 0.1 |
-|:--------------------------------|:--------------|:---------------|:---------------|
-| 125000                          | 4681          | 4824           | 5004           |
-| 1400000                         | **1672**      | 3043           | 4738           |
-| 5500000                         | **-**         | **1389**       | 3975           |
-| 8000000                         | **-**         | **-**          | 3565           |
-| 16000000                        | **-**         | **-**          | 2679           |
-| 29000000                        | **-**         | **-**          | **1855**       |
-
-> 2. GPU Memory Utilization of Various Parallel Techniques (MB per GPU) on a Tesla V100 32GB x 8 System (Lower is Optimal)
-
-| Number of Identities in Dataset | Data Parallel | Model Parallel | Partial FC 0.1 |
-|:--------------------------------|:--------------|:---------------|:---------------|
-| 125000                          | 7358          | 5306           | 4868           |
-| 1400000                         | 32252         | 11178          | 6056           |
-| 5500000                         | **-**         | 32188          | 9854           |
-| 8000000                         | **-**         | **-**          | 12310          |
-| 16000000                        | **-**         | **-**          | 19950          |
-| 29000000                        | **-**         | **-**          | 32324          |
-
-
-## New Methods (2026)
-
-### AdaFace — Quality-Adaptive Margin Loss
-
-Paper: [AdaFace: Quality Adaptive Margin for Face Recognition](https://arxiv.org/abs/2204.09949) (CVPR 2022)
-
-Uses the feature L2 norm as an image quality proxy to adaptively scale per-sample training margins: high-quality (high-norm) samples receive a tighter margin; low-quality samples are penalised less. An EMA running estimate of the batch norm distribution normalises the scaler.
-
-**New files:**
-- `losses.py` → `AdaFaceLoss` class
-- `partial_fc_v2.py` → `PartialFC_V2_AdaFace` (all-gathers norms across GPUs)
-- `train_adaface.py` — training entry point
-- `configs/ms1mv3_adaface_r50.py`, `configs/ms1mv3_adaface_r100.py`
-
-**IResNet backbone change:** pass `norm_output=True` to `get_model` and the backbone returns an `(embedding, norm)` tuple.
+### AdaFace
 
 ```shell
 torchrun --nproc_per_node=8 train_adaface.py configs/ms1mv3_adaface_r50
+torchrun --nproc_per_node=8 train_adaface.py configs/ms1mv3_adaface_r100
 ```
 
-Key config parameters: `adaface_m` (margin, default 0.4), `adaface_h` (scaler clip, default 0.333), `adaface_s` (scale, default 64), `adaface_t_alpha` (EMA rate, default 0.01).
+### TransFace
 
----
-
-### TransFace — FFT Amplitude Augmentation
-
-Paper: [TransFace: Calibrating Transformer Training for Face Recognition from a Data-Centric Perspective](https://arxiv.org/abs/2308.10133) (ICCV 2023)
-
-An online data augmentation that selectively applies low-frequency amplitude blending to the least-discriminative patches in each training batch. The ViT backbone emits per-patch attention entropy to guide which images are augmented.
-
-**New files:**
-- `augmentation/fft_mix.py` → `amplitude_spectrum_mix(src, ref, ratio)` — blends amplitude spectra, preserves src phase
-- `backbones/transface_vit.py` → `TransFaceViT` subclass of `VisionTransformer`:
-  - **Train mode:** `forward(x)` → `(embedding, patch_entropy)` where `patch_entropy` shape is `(B,)`
-  - **Eval mode:** `forward(x)` → `embedding` (identical to base ViT)
-- `train_transface.py` — training entry point with entropy-guided FFT loop
-- `configs/ms1mv3_transface_vit_b.py`, `configs/ms1mv3_transface_vit_l.py`
-
-**New `get_model` names:** `transface_vit_b`, `transface_vit_l`
+Entropy-guided FFT augmentation. Each step: run backbone to get per-patch attention entropy → apply FFT amplitude mixing to below-median-entropy images (probability `fft_prob`) → re-run backbone on augmented batch → standard ArcFace loss.
 
 ```shell
 torchrun --nproc_per_node=8 train_transface.py configs/ms1mv3_transface_vit_b
+torchrun --nproc_per_node=8 train_transface.py configs/ms1mv3_transface_vit_l
 ```
 
-Key config parameters: `fft_prob` (probability of augmenting each step, default 0.2), `fft_ratio` (fraction of spectrum to blend, default 0.1).
+Key config parameters: `fft_prob` (default 0.2), `fft_ratio` (spectrum blend fraction, default 0.1).
 
----
+### UIFace — Synthetic Data Generation
 
-### MambaVision — Hybrid CNN + SSM Backbone
-
-Inspired by [MambaVision](https://github.com/NVlabs/MambaVision) (NeurIPS 2024). A face-adapted hybrid backbone combining strided CNN stages for local feature extraction with Mamba (S6 selective state space) blocks for long-range sequence modelling over patch tokens.
-
-```
-112×112 input
-  → Stage 1: CNN (3→C, stride 2×2) → 56×56
-  → Stage 2: CNN (C→2C, stride 2×2) → 28×28 = 784 patch tokens
-  → N × MambaBlock(2C)
-  → Global average pool → Linear(2C→512) → BN → Linear(512→D) → BN
-```
-
-Pure PyTorch selective scan — no `mamba_ssm` CUDA package required. For production GPU training, replace `_selective_scan` in `backbones/mamba_vit.py` with `mamba_ssm` kernels for 10–100× speedup.
-
-**New `get_model` names:**
-
-| Name | SSM dim | Mamba blocks | ~Params |
-|------|---------|-------------|---------|
-| `mamba_s` | 256 | 12 | 7M |
-| `mamba_b` | 512 | 24 | 90M |
-| `mamba_l` | 768 | 24 | 190M |
-
-**New configs:** `configs/ms1mv3_mamba_b.py`, `configs/ms1mv3_mamba_l.py`
-
-```shell
-torchrun --nproc_per_node=8 train_v2.py configs/ms1mv3_mamba_b
-```
-
----
-
-### Large-ViT Configs (LVFace-style)
-
-The existing `VisionTransformer` backbone (ViT-B/L/H) is already implemented. New MS1MV3 configs enable training with AdamW, matching the large-scale setup from [LVFace](https://github.com/bytedance/LVFace):
-
-| Config | Backbone | Embed dim | Depth |
-|--------|----------|-----------|-------|
-| `ms1mv3_vit_b` | `vit_b_dp005_mask_005` | 512 | 24 |
-| `ms1mv3_vit_l` | `vit_l_dp005_mask_005` | 768 | 24 |
-| `ms1mv3_vit_h` | `vit_h` | 1024 | 48 |
-
-```shell
-torchrun --nproc_per_node=8 train_v2.py configs/ms1mv3_vit_h
-```
-
----
-
-### UIFace — Diffusion-Based Synthetic Face Generation
-
-Source: [TFace](https://github.com/Tencent/TFace). A VQ-GAN + DDPM generation pipeline that synthesises diverse training faces conditioned on identity embeddings.
-
-Located in `recognition/uiface/`. See `recognition/uiface/requirements.txt` for dependencies.
+A VQ-GAN + DDPM diffusion pipeline that generates diverse synthetic training faces conditioned on identity embeddings (ported from [TFace](https://github.com/Tencent/TFace)).
 
 ```shell
 # Train the diffusion model
@@ -298,11 +151,128 @@ python recognition/uiface/main.py
 python recognition/uiface/sample.py
 ```
 
+See `recognition/uiface/requirements.txt` for additional dependencies.
+
+---
+
+## Download Datasets
+
+- [MS1MV2](https://github.com/deepinsight/insightface/tree/master/recognition/_datasets_#ms1m-arcface-85k-ids58m-images-57) (87k IDs, 5.8M images)
+- [MS1MV3](https://github.com/deepinsight/insightface/tree/master/recognition/_datasets_#ms1m-retinaface) (93k IDs, 5.2M images)
+- [Glint360K](https://github.com/deepinsight/insightface/tree/master/recognition/partial_fc#4-download) (360k IDs, 17.1M images)
+- [WebFace42M](docs/prepare_webface42m.md) (2M IDs, 42.5M images)
+- [Custom dataset](docs/prepare_custom_dataset.md)
+
+To use DALI, shuffle the rec file first:
+
+```shell
+python scripts/shuffle_rec.py ms1m-retinaface-t1
+```
+
+---
+
+## Model Zoo
+
+- Models are available for non-commercial research purposes only.
+- [Baidu Yun Pan](https://pan.baidu.com/s/1CL-l4zWqsI1oDuEEYVhj-g): e8pw
+- [OneDrive](https://1drv.ms/u/s!AswpsDO2toNKq0lWY69vN58GR6mw?e=p9Ov5d)
+
+### Performance on IJB-C and [ICCV2021-MFR](https://github.com/deepinsight/insightface/blob/master/challenges/mfr/README.md)
+
+#### 1. Single-Host GPU
+
+| Datasets | Backbone | MFR-ALL | IJB-C(1E-4) | IJB-C(1E-5) | Log |
+|:---------|:---------|:--------|:------------|:------------|:----|
+| MS1MV2 | mobilefacenet-0.45G | 62.07 | 93.61 | 90.28 | [log](https://raw.githubusercontent.com/anxiangsir/insightface_arcface_log/master/ms1mv2_mbf/training.log) |
+| MS1MV2 | r50 | 75.13 | 95.97 | 94.07 | [log](https://raw.githubusercontent.com/anxiangsir/insightface_arcface_log/master/ms1mv2_r50/training.log) |
+| MS1MV2 | r100 | 78.12 | 96.37 | 94.27 | [log](https://raw.githubusercontent.com/anxiangsir/insightface_arcface_log/master/ms1mv2_r100/training.log) |
+| MS1MV3 | mobilefacenet-0.45G | 63.78 | 94.23 | 91.33 | [log](https://raw.githubusercontent.com/anxiangsir/insightface_arcface_log/master/ms1mv3_mbf/training.log) |
+| MS1MV3 | r50 | 79.14 | 96.37 | 94.47 | [log](https://raw.githubusercontent.com/anxiangsir/insightface_arcface_log/master/ms1mv3_r50/training.log) |
+| MS1MV3 | r100 | 81.97 | 96.85 | 95.02 | [log](https://raw.githubusercontent.com/anxiangsir/insightface_arcface_log/master/ms1mv3_r100/training.log) |
+| Glint360K | mobilefacenet-0.45G | 70.18 | 95.04 | 92.62 | [log](https://raw.githubusercontent.com/anxiangsir/insightface_arcface_log/master/glint360k_mbf/training.log) |
+| Glint360K | r50 | 86.34 | 97.16 | 95.81 | [log](https://raw.githubusercontent.com/anxiangsir/insightface_arcface_log/master/glint360k_r50/training.log) |
+| Glint360k | r100 | 89.52 | 97.55 | 96.38 | [log](https://raw.githubusercontent.com/anxiangsir/insightface_arcface_log/master/glint360k_r100/training.log) |
+| WF4M | r100 | 89.87 | 97.19 | 95.48 | [log](https://raw.githubusercontent.com/anxiangsir/insightface_arcface_log/master/wf4m_r100/training.log) |
+| WF12M-PFC-0.2 | r100 | 94.75 | 97.60 | 95.90 | [log](https://raw.githubusercontent.com/anxiangsir/insightface_arcface_log/master/wf12m_pfc02_r100/training.log) |
+| WF12M-PFC-0.3 | r100 | 94.71 | 97.64 | 96.01 | [log](https://raw.githubusercontent.com/anxiangsir/insightface_arcface_log/master/wf12m_pfc03_r100/training.log) |
+| WF42M-PFC-0.2 | r100 | 96.27 | 97.70 | 96.31 | [log](https://raw.githubusercontent.com/anxiangsir/insightface_arcface_log/master/wf42m_pfc02_r100/training.log) |
+| WF42M-PFC-0.2 | ViT-T-1.5G | 92.04 | 97.27 | 95.68 | [log](https://raw.githubusercontent.com/anxiangsir/insightface_arcface_log/master/wf42m_pfc02_40epoch_8gpu_vit_t/training.log) |
+| WF42M-PFC-0.3 | ViT-B-11G | 97.16 | 97.91 | 97.05 | [log](https://raw.githubusercontent.com/anxiangsir/insightface_arcface_log/master/pfc03_wf42m_vit_b_8gpu/training.log) |
+
+#### 2. Multi-Host GPU
+
+| Datasets | Backbone(bs×gpus) | MFR-ALL | IJB-C(1E-4) | IJB-C(1E-5) | Throughput | Log |
+|:---------|:------------------|:--------|:------------|:------------|:-----------|:----|
+| WF42M-PFC-0.2 | r50(512×8) | 93.83 | 97.53 | 96.16 | ~5900 | [log](https://raw.githubusercontent.com/anxiangsir/insightface_arcface_log/master/webface42m_r50_bs4k_pfc02/training.log) |
+| WF42M-PFC-0.2 | r50(512×16) | 93.96 | 97.46 | 96.12 | ~11000 | [log](https://raw.githubusercontent.com/anxiangsir/insightface_arcface_log/master/webface42m_r50_lr01_pfc02_bs8k_16gpus/training.log) |
+| WF42M-PFC-0.2 | r50(128×32) | 94.04 | 97.48 | 95.94 | ~17000 | — |
+| WF42M-PFC-0.2 | r100(128×16) | 96.28 | 97.80 | 96.57 | ~5200 | — |
+| WF42M-PFC-0.2 | r100(256×16) | 96.69 | 97.85 | 96.63 | ~5200 | [log](https://raw.githubusercontent.com/anxiangsir/insightface_arcface_log/master/webface42m_r100_bs4k_pfc02/training.log) |
+| WF42M-PFC-0.2 | r100(128×32) | 96.57 | 97.83 | 96.50 | ~9800 | — |
+
+`r100(128×32)` means backbone r100, batch size 128 per GPU, 32 GPUs.
+
+#### 3. ViT for Face Recognition
+
+| Datasets | Backbone(bs) | FLOPs | MFR-ALL | IJB-C(1E-4) | IJB-C(1E-5) | Throughput | Log |
+|:---------|:-------------|:------|:--------|:------------|:------------|:-----------|:----|
+| WF42M-PFC-0.3 | r18(128×32) | 2.6 | 79.13 | 95.77 | 93.36 | — | — |
+| WF42M-PFC-0.3 | r50(128×32) | 6.3 | 94.03 | 97.48 | 95.94 | — | — |
+| WF42M-PFC-0.3 | r100(128×32) | 12.1 | 96.69 | 97.82 | 96.45 | — | — |
+| WF42M-PFC-0.3 | r200(128×32) | 23.5 | 97.70 | 97.97 | 96.93 | — | — |
+| WF42M-PFC-0.3 | VIT-T(384×64) | 1.5 | 92.24 | 97.31 | 95.97 | ~35000 | — |
+| WF42M-PFC-0.3 | VIT-S(384×64) | 5.7 | 95.87 | 97.73 | 96.57 | ~25000 | [log](https://raw.githubusercontent.com/anxiangsir/insightface_arcface_log/master/pfc03_wf42m_vit_s_64gpu/training.log) |
+| WF42M-PFC-0.3 | VIT-B(384×64) | 11.4 | 97.42 | 97.90 | 97.04 | ~13800 | [log](https://raw.githubusercontent.com/anxiangsir/insightface_arcface_log/master/pfc03_wf42m_vit_b_64gpu/training.log) |
+| WF42M-PFC-0.3 | VIT-L(384×64) | 25.3 | 97.85 | 98.00 | 97.23 | ~9406 | [log](https://raw.githubusercontent.com/anxiangsir/insightface_arcface_log/master/pfc03_wf42m_vit_l_64gpu/training.log) |
+
+#### 4. Noisy Datasets
+
+| Datasets | Backbone | MFR-ALL | IJB-C(1E-4) | IJB-C(1E-5) |
+|:---------|:---------|:--------|:------------|:------------|
+| WF12M-Flip(40%) | r50 | 43.87 | 88.35 | 80.78 |
+| WF12M-Flip(40%)-PFC-0.1* | r50 | 80.20 | 96.11 | 93.79 |
+| WF12M-Conflict | r50 | 79.93 | 95.30 | 91.56 |
+| WF12M-Conflict-PFC-0.3* | r50 | 91.68 | 97.28 | 95.75 |
+
+`+PFC-0.1*` denotes additional abnormal inter-class filtering.
+
+---
+
+## Speed Benchmark
+
+<div><img src="https://github.com/anxiangsir/insightface_arcface_log/blob/master/pfc_exp.png" width="90%" /></div>
+
+Partial FC maintains the same accuracy as full softmax while providing several times faster training and lower GPU memory usage. It supports up to 29 million identities and works with multi-machine distributed + mixed-precision training.
+
+More details: [speed_benchmark.md](docs/speed_benchmark.md)
+
+**Training speed (samples/sec) on Tesla V100 32GB × 8:**
+
+| Identities | Data Parallel | Model Parallel | Partial FC 0.1 |
+|:-----------|:--------------|:---------------|:---------------|
+| 125,000 | 4681 | 4824 | 5004 |
+| 1,400,000 | 1672 | 3043 | 4738 |
+| 5,500,000 | — | 1389 | 3975 |
+| 8,000,000 | — | — | 3565 |
+| 16,000,000 | — | — | 2679 |
+| 29,000,000 | — | — | 1855 |
+
+**GPU memory (MB per GPU) on Tesla V100 32GB × 8:**
+
+| Identities | Data Parallel | Model Parallel | Partial FC 0.1 |
+|:-----------|:--------------|:---------------|:---------------|
+| 125,000 | 7358 | 5306 | 4868 |
+| 1,400,000 | 32252 | 11178 | 6056 |
+| 5,500,000 | — | 32188 | 9854 |
+| 8,000,000 | — | — | 12310 |
+| 16,000,000 | — | — | 19950 |
+| 29,000,000 | — | — | 32324 |
+
 ---
 
 ## Citations
 
-```
+```bibtex
 @inproceedings{deng2019arcface,
   title={Arcface: Additive angular margin loss for deep face recognition},
   author={Deng, Jiankang and Guo, Jia and Xue, Niannan and Zafeiriou, Stefanos},
@@ -310,10 +280,10 @@ python recognition/uiface/sample.py
   year={2019}
 }
 @inproceedings{an2022partialfc,
-    author={An, Xiang and Deng, Jiankang and Guo, Jia and Feng, Ziyong and Zhu, XuHan and Yang, Jing and Liu, Tongliang},
-    title={Killing Two Birds With One Stone: Efficient and Robust Training of Face Recognition CNNs by Partial FC},
-    booktitle={CVPR},
-    year={2022},
+  author={An, Xiang and Deng, Jiankang and Guo, Jia and Feng, Ziyong and Zhu, XuHan and Yang, Jing and Liu, Tongliang},
+  title={Killing Two Birds With One Stone: Efficient and Robust Training of Face Recognition CNNs by Partial FC},
+  booktitle={CVPR},
+  year={2022},
 }
 @inproceedings{zhu2021webface260m,
   title={Webface260m: A benchmark unveiling the power of million-scale deep face recognition},
@@ -321,8 +291,25 @@ python recognition/uiface/sample.py
   booktitle={CVPR},
   year={2021}
 }
+@inproceedings{kim2022adaface,
+  title={AdaFace: Quality Adaptive Margin for Face Recognition},
+  author={Kim, Minchul and Jain, Anil K and Liu, Xiaoming},
+  booktitle={CVPR},
+  year={2022}
+}
+@inproceedings{dan2023transface,
+  title={TransFace: Calibrating Transformer Training for Face Recognition from a Data-Centric Perspective},
+  author={Dan, Jun and Liu, Yang and Xie, Haoyu and Deng, Jiankang and Xie, Haoran and Ding, Shouhong and Sun, Baigui},
+  booktitle={ICCV},
+  year={2023}
+}
+@inproceedings{hatamizadeh2024mambavision,
+  title={MambaVision: A Hybrid Mamba-Transformer Vision Backbone},
+  author={Hatamizadeh, Ali and Kautz, Jan},
+  booktitle={NeurIPS},
+  year={2024}
+}
 ```
 
-
-## Welcome!  
-<a href='https://mapmyvisitors.com/web/1bw5e'  title='Visit tracker'><img src='https://mapmyvisitors.com/map.png?cl=ffffff&w=1024&t=n&d=0mqj5JJrL2-BR6EVSskbTRFBlGgSbqZK9ZJg6g_vh74&co=2d78ad&ct=ffffff'/></a>
+## Welcome!
+<a href='https://mapmyvisitors.com/web/1bw5e' title='Visit tracker'><img src='https://mapmyvisitors.com/map.png?cl=ffffff&w=1024&t=n&d=0mqj5JJrL2-BR6EVSskbTRFBlGgSbqZK9ZJg6g_vh74&co=2d78ad&ct=ffffff'/></a>
