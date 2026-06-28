@@ -3,7 +3,12 @@ import os.path
 import numpy as np
 import torch
 import torch.nn.functional as F
-from pytorch_lightning.utilities import rank_zero_only
+try:
+    from pytorch_lightning.utilities import rank_zero_only
+except ImportError:
+    def rank_zero_only(fn):
+        return fn
+
 from utils.colored import colored
 
 

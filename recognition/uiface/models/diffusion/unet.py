@@ -549,6 +549,7 @@ class ConditionalUNet(torch.nn.Module):
         x = self.image_proj(x)
 
         # use context only if the model is context_conditional
+        c = None
         if self.is_context_conditional:
             if context is None:
                 c = (

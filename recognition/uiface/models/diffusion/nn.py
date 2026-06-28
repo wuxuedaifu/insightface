@@ -125,18 +125,18 @@ class SpatialSelfAttentionBlock(torch.nn.Module):
 
         self.norm = torch.nn.GroupNorm(32, in_channels)
 
-    def forward(self, x, c):
-        b, c, h, w = x.shape
+    def forward(self, x, c=None, src_self_attn_map=None, src_cross_attn_map=None):
+        b, ch, h, w = x.shape
         x_in = x
 
         x = self.norm(x)
         x = rearrange(x, "b c h w -> b c (h w)")
 
-        x = self.attention(x)
+        x, self_attn_map = self.attention(x, src_attn_map=src_self_attn_map)
 
         x = rearrange(x, "b c (h w) -> b c h w", h=h)
 
-        return x + x_in
+        return x + x_in, self_attn_map, None
 
 
 class MultiHeadAttention(torch.nn.Module):

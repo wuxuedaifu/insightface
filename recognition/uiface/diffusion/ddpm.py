@@ -77,16 +77,16 @@ class DenoisingDiffusionProbabilisticModel(torch.nn.Module):
         eta=0,
         ddim_step=50,
     ) -> torch.Tensor:
-        x_t = x_T if x_T is not None else self.sample_prior(n_samples, size).cuda()
+        device = next(self.parameters()).device
+        x_t = x_T if x_T is not None else self.sample_prior(n_samples, size).to(device)
 
         skip = self.T // ddim_step
-        print("DDIM Sampling")
-        print("skip: %d" % skip)
         self.eval()
         with torch.no_grad():
             for i in reversed(range(0, self.T, skip)):
-                t = torch.tensor(i).repeat(n_samples).cuda()
-                score = score.cuda()
+                t = torch.tensor(i).repeat(n_samples).to(device)
+                if score is not None:
+                    score = score.to(device)
                 model_output, self_attn, cross_attn = self.eps_model(
                     x_t, t, context, score, dropout_mask
                 )
@@ -96,7 +96,7 @@ class DenoisingDiffusionProbabilisticModel(torch.nn.Module):
                 alpha_prod_t_prev = (
                     self.alphas_prev[prev_timestep]
                     if prev_timestep >= 0
-                    else torch.tensor(1.0).cuda()
+                    else torch.tensor(1.0).to(device)
                 )
                 beta_prod_t = 1 - alpha_prod_t
                 beta_prod_t_prev = 1 - alpha_prod_t_prev
@@ -121,10 +121,7 @@ class DenoisingDiffusionProbabilisticModel(torch.nn.Module):
                 )
 
                 if eta > 0:
-                    device = (
-                        model_output.device if torch.is_tensor(model_output) else "cpu"
-                    )
-                    noise = torch.randn(n_samples, *size).cuda()
+                    noise = torch.randn(n_samples, *size).to(device)
                     variance = std_dev_t * noise
                     if not torch.is_tensor(model_output):
                         variance = variance.numpy()
@@ -337,6 +334,7 @@ def compute_beta_schedule(
 
         s = 0.008
         beta_min = 0.0 if schedule_type.lower() == "cosine" else beta_min
+        beta_max = 1.0 if schedule_type.lower() == "cosine" else beta_max
         k = 1 if schedule_type.lower() == "cosine" else k
 
         return betas_for_alpha_bar(
