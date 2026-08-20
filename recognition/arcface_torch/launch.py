@@ -33,9 +33,9 @@ LOSSES = ["arcface", "cosface", "adaface"]
 # per-GPU batch size that fits comfortably on a 141 GB H200 at fp16 (scaled for smaller GPUs)
 _BATCH_141GB = {
     "r18": 512, "r34": 512, "r50": 512, "r100": 512, "r200": 256, "r2060": 64, "mbf": 1024, "mbf_large": 1024,
-    "vit_t": 512, "vit_s": 512, "vit_b_dp005_mask_005": 256, "vit_l_dp005_mask_005": 192, "vit_h": 128,
-    "mambavision_t": 512, "mambavision_s": 512, "mambavision_b": 256, "mambavision_l": 192,
-    "transface_vit_b": 256, "transface_vit_l": 128, "transface_pp_vit_s": 256, "transface_pp_vit_b": 128,
+    "vit_t": 512, "vit_s": 512, "vit_b_dp005_mask_005": 384, "vit_l_dp005_mask_005": 384, "vit_h": 256,
+    "mambavision_t": 512, "mambavision_s": 512, "mambavision_b": 384, "mambavision_l": 256,
+    "transface_vit_b": 256, "transface_vit_l": 256, "transface_pp_vit_s": 256, "transface_pp_vit_b": 192,
 }
 # (optimizer, base lr, reference total batch for that lr, weight decay, epochs, warmup) - from the official configs
 _RECIPE = {
@@ -124,7 +124,8 @@ def detect_gpus():
 
 
 def _round32(x):
-    return max(32, int(x) // 32 * 32)
+    """nearest multiple of 32 (so a 140 GB H200 does not round 127.3 down to 96)."""
+    return max(32, int(x / 32 + 0.5) * 32)
 
 
 def recommend(network, loss, num_gpus, gpu_mem_gb, num_classes, num_image):
@@ -133,7 +134,7 @@ def recommend(network, loss, num_gpus, gpu_mem_gb, num_classes, num_image):
     assert loss in LOSSES, loss
     fam = FAMILY[network]
     optimizer, base_lr, ref_total, wd, epochs, warmup = _RECIPE[fam]
-    batch = _round32(_BATCH_141GB[network] * min(1.0, gpu_mem_gb / 141.0))
+    batch = _round32(_BATCH_141GB[network] * min(1.0, gpu_mem_gb / 140.0))
     total = batch * num_gpus
     lr = base_lr * total / ref_total
     if optimizer == "sgd":
@@ -339,7 +340,8 @@ def main():
     print("6) 推荐设置 / recommended settings:")
     print(f"   脚本 {r['script']} | 优化器 {r['optimizer']} lr {r['lr']:.4g} wd {r['weight_decay']}")
     print(f"   batch {r['batch_size']}/GPU x {n_use} = {r['total_batch']} | PartialFC sample_rate {r['sample_rate']}")
-    print(f"   epochs {r['num_epoch']} (warmup {r['warmup_epoch']}) | fp16 {r['fp16']} | DALI {dali} | workers {a.num_workers}")
+    dali_note = "" if r["dali"] else "  (nvidia-dali 未安装: `uv sync --extra dali` 后可用 GPU 解码)"
+    print(f"   epochs {r['num_epoch']} (warmup {r['warmup_epoch']}) | fp16 {r['fp16']} | DALI {dali}{dali_note} | workers {a.num_workers}")
     if not yes and not _bool(_ask("   接受以上设置? / accept", default="y")):
         r["batch_size"] = _ask("   batch_size / GPU", default=r["batch_size"], cast=int); r["total_batch"] = r["batch_size"] * n_use
         r["sample_rate"] = _ask("   sample_rate", default=r["sample_rate"], cast=float)

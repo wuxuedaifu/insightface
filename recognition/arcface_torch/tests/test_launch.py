@@ -28,8 +28,8 @@ def test_recommend_webface42m_on_4xh200_cnn():
 def test_recommend_vit_and_transface_pp_use_adamw_and_right_scripts():
     from launch import recommend
     r = recommend("vit_b_dp005_mask_005", "arcface", 4, 141, 2_059_906, 42_474_557)
-    assert r["script"] == "train_v2.py" and r["optimizer"] == "adamw" and r["batch_size"] == 256
-    assert abs(r["lr"] - 0.0005) < 1e-12                  # 1e-3 @ 2048 total -> 1024 total
+    assert r["script"] == "train_v2.py" and r["optimizer"] == "adamw" and r["batch_size"] == 384
+    assert abs(r["lr"] - 1e-3 * 1536 / 2048) < 1e-12      # 1e-3 @ 2048 total, scaled linearly
     r = recommend("transface_pp_vit_s", "adaface", 4, 141, 2_059_906, 42_474_557)
     assert r["script"] == "train_transface_pp.py" and r["loss"] == "adaface" and r["byte_format"] == "tiff"
     r = recommend("transface_vit_b", "arcface", 4, 141, 2_059_906, 42_474_557)
@@ -82,3 +82,9 @@ def test_resolve_dataset_dir_explains_directories_named_like_the_files():
             resolve_dataset_dir(tmp)
         msg = str(e.value)
         assert "train.idx" in msg and "directory" in msg and tmp in msg
+
+
+def test_recommend_h200_nvl_140gb_does_not_round_down_a_tier():
+    from launch import recommend
+    r = recommend("transface_vit_l", "adaface", num_gpus=8, gpu_mem_gb=140, num_classes=2_059_906, num_image=42_474_557)
+    assert r["batch_size"] == 256 and r["total_batch"] == 2048 and abs(r["lr"] - 1e-3) < 1e-12
