@@ -60,3 +60,25 @@ def test_render_config_is_importable_and_complete():
               "margin_list", "embedding_size", "weight_decay", "num_workers"):
         assert k in cfg, k
     assert cfg.pretrained == "/w/model.pt" and cfg.dali is True and cfg.save_all_states is True
+
+
+def test_resolve_dataset_dir_finds_rec_below_given_path(tmp_path=None):
+    import tempfile, pathlib
+    from launch import resolve_dataset_dir
+    with tempfile.TemporaryDirectory() as tmp:
+        inner = pathlib.Path(tmp) / "faces_webface" / "train"
+        inner.mkdir(parents=True)
+        (inner / "train.rec").write_bytes(b"x"); (inner / "train.idx").write_text("1\t0\n")
+        assert resolve_dataset_dir(tmp) == str(inner)                       # searched two levels down
+        assert resolve_dataset_dir(str(inner)) == str(inner)
+
+
+def test_resolve_dataset_dir_explains_directories_named_like_the_files():
+    import tempfile, pathlib
+    from launch import resolve_dataset_dir
+    with tempfile.TemporaryDirectory() as tmp:
+        (pathlib.Path(tmp) / "train.idx").mkdir(); (pathlib.Path(tmp) / "train.rec").mkdir()
+        with pytest.raises(FileNotFoundError) as e:
+            resolve_dataset_dir(tmp)
+        msg = str(e.value)
+        assert "train.idx" in msg and "directory" in msg and tmp in msg

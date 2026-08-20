@@ -50,13 +50,45 @@ _MARGIN = {"arcface": (1.0, 0.5, 0.0), "cosface": (1.0, 0.0, 0.4), "adaface": (1
 
 
 # ----------------------------------------------------------------------------- helpers
+def resolve_dataset_dir(path, max_depth=2):
+    """Return the directory that holds regular `train.rec` + `train.idx` files: `path` itself or a
+    sub-directory up to `max_depth` levels below it (e.g. the user pointed at the parent folder).
+    Raises FileNotFoundError with a listing of what was found instead."""
+    path = os.path.abspath(os.path.expanduser(path))
+    def has_rec(d):
+        return os.path.isfile(os.path.join(d, "train.rec")) and os.path.isfile(os.path.join(d, "train.idx"))
+    if has_rec(path):
+        return path
+    found = []
+    for root, dirs, files in os.walk(path):
+        depth = root[len(path):].count(os.sep)
+        if depth >= max_depth:
+            dirs[:] = []
+        if root != path and has_rec(root):
+            found.append(root)
+    if len(found) == 1:
+        return found[0]
+    if len(found) > 1:
+        raise FileNotFoundError(f"several RecordIO sets below {path}: {found} - pass one of them explicitly")
+    details = []
+    for name in ("train.rec", "train.idx"):
+        q = os.path.join(path, name)
+        if os.path.isdir(q):
+            details.append(f"{q} is a directory (contains: {', '.join(sorted(os.listdir(q))[:5]) or 'nothing'})")
+        elif not os.path.exists(q):
+            details.append(f"{q} is missing")
+    listing = ", ".join(sorted(os.listdir(path))[:10]) if os.path.isdir(path) else "<not a directory>"
+    raise FileNotFoundError(
+        f"no train.rec/train.idx files found in {path} (contents: {listing}). " + "; ".join(details) +
+        ". Expected an insightface RecordIO directory (e.g. faces_webface/train.rec + train.idx).")
+
+
 def inspect_dataset(rec_dir):
     """num_image / num_classes / size of an insightface RecordIO directory (reads two records)."""
     import mxnet as mx
     import numpy as np
+    rec_dir = resolve_dataset_dir(rec_dir)
     rec_path, idx_path = os.path.join(rec_dir, "train.rec"), os.path.join(rec_dir, "train.idx")
-    if not (os.path.exists(rec_path) and os.path.exists(idx_path)):
-        raise FileNotFoundError(f"{rec_dir} must contain train.rec and train.idx")
     rec = mx.recordio.MXIndexedRecordIO(idx_path, rec_path, "r")
     header, _ = mx.recordio.unpack(rec.read_idx(0))
     keys = list(rec.keys)
@@ -76,7 +108,8 @@ def inspect_dataset(rec_dir):
         except ValueError:
             pass
     rec.close()
-    return {"num_image": num_image, "num_classes": num_classes, "rec_bytes": os.path.getsize(rec_path)}
+    return {"num_image": num_image, "num_classes": num_classes, "rec_bytes": os.path.getsize(rec_path),
+            "rec_dir": rec_dir}
 
 
 def detect_gpus():
@@ -251,8 +284,19 @@ def main():
         sys.exit("no GPU found / 未检测到 GPU")
 
     # 1. dataset
-    rec = a.rec or _ask("1) 训练数据集目录 (含 train.rec/train.idx) / dataset dir", yes=yes)
-    info = inspect_dataset(rec)
+    rec = a.rec
+    while True:
+        rec = rec or _ask("1) 训练数据集目录 (含 train.rec/train.idx) / dataset dir", yes=yes)
+        try:
+            info = inspect_dataset(rec)
+            break
+        except FileNotFoundError as e:
+            print(f"   !! {e}")
+            if a.rec or yes:
+                sys.exit(1)
+            rec = None
+    rec = info["rec_dir"]
+    print(f"   使用 RecordIO 目录: {rec}")
     num_classes = a.num_classes or info["num_classes"]
     print(f"   数据集: {info['num_image']:,} 张图, {num_classes:,} 个 ID, {info['rec_bytes'] / 2 ** 30:.1f} GB")
     if not a.num_classes and not yes:
