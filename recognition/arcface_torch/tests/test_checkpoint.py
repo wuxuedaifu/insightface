@@ -49,6 +49,35 @@ def test_save_without_keep_epoch_checkpoints_only_writes_latest():
         assert os.listdir(tmp) == ["checkpoint_gpu_0.pt"]
 
 
+def test_keep_last_epochs_prunes_older_per_epoch_files():
+    """`keep_last_epochs = N` keeps the newest N per-epoch snapshots for this rank and nothing else;
+    other ranks' files and the rolling `checkpoint_gpu_{rank}.pt` must survive."""
+    from utils.utils_checkpoint import save_checkpoint
+    with tempfile.TemporaryDirectory() as tmp:
+        b, p, o, s, sc = _state(0)
+        open(os.path.join(tmp, "checkpoint_epoch0_gpu_1.pt"), "w").close()      # another rank's file
+        cfg = _cfg(tmp, keep_last_epochs=2)
+        for epoch in range(5):
+            save_checkpoint(cfg, 0, epoch, 100 * epoch, b, p, o, s, sc)
+        kept = sorted(f for f in os.listdir(tmp) if f.endswith("_gpu_0.pt"))
+        assert kept == ["checkpoint_epoch3_gpu_0.pt", "checkpoint_epoch4_gpu_0.pt", "checkpoint_gpu_0.pt"], kept
+        assert os.path.exists(os.path.join(tmp, "checkpoint_epoch0_gpu_1.pt"))
+        # epoch 10 must not be mistaken for older than epoch 9 (numeric, not lexicographic, ordering)
+        save_checkpoint(cfg, 0, 9, 900, b, p, o, s, sc)
+        save_checkpoint(cfg, 0, 10, 1000, b, p, o, s, sc)
+        kept = sorted(f for f in os.listdir(tmp) if f.startswith("checkpoint_epoch") and f.endswith("_gpu_0.pt"))
+        assert kept == ["checkpoint_epoch10_gpu_0.pt", "checkpoint_epoch9_gpu_0.pt"], kept
+
+
+def test_keep_last_epochs_zero_keeps_everything():
+    from utils.utils_checkpoint import save_checkpoint
+    with tempfile.TemporaryDirectory() as tmp:
+        b, p, o, s, sc = _state(0)
+        for epoch in range(4):
+            save_checkpoint(_cfg(tmp, keep_last_epochs=0), 0, epoch, 10, b, p, o, s, sc)
+        assert len([f for f in os.listdir(tmp) if f.startswith("checkpoint_epoch")]) == 4
+
+
 def test_resolve_resume_path_variants():
     from utils.utils_checkpoint import resolve_resume_path
     with tempfile.TemporaryDirectory() as tmp:

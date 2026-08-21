@@ -99,6 +99,8 @@ def main(args):
     backbone = get_model(
         cfg.network, dropout=0.0, fp16=cfg.fp16,
         num_features=cfg.embedding_size,
+        using_checkpoint=cfg.get("using_checkpoint", None),
+        attn_impl=cfg.get("attn_impl", "math"),
         norm_output=use_adaface).cuda()
 
     if cfg.get("pretrained"):
@@ -106,7 +108,7 @@ def main(args):
 
     backbone = torch.nn.parallel.DistributedDataParallel(
         module=backbone, broadcast_buffers=False, device_ids=[local_rank],
-        bucket_cap_mb=16, find_unused_parameters=True)
+        bucket_cap_mb=16, find_unused_parameters=False)
     backbone.register_comm_hook(None, fp16_compress_hook)
 
     backbone.train()

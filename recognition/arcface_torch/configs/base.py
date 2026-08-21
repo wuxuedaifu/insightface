@@ -15,6 +15,7 @@ config.resume_from = None        # directory or file pattern (may contain {rank}
 config.resume_epoch = None       # resume from checkpoint_epoch{N}_gpu_{rank}.pt instead of the latest
 config.save_all_states = False   # write resumable checkpoints every epoch
 config.keep_epoch_checkpoints = False  # also keep checkpoint_epoch{N}_gpu_{rank}.pt for every epoch
+config.keep_last_epochs = 0           # with the above: keep only the newest N per-epoch files (0 = all)
 config.output = "ms1mv3_arcface_r50"
 
 config.embedding_size = 512

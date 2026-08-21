@@ -191,7 +191,7 @@ torchrun --nproc_per_node=8 train_transface_pp.py configs/ms1mv3_transface_pp_vi
 
 ### Resuming from a checkpoint
 
-All `train_*.py` scripts share `utils/utils_checkpoint.py`. With `config.save_all_states = True` every epoch writes `{output}/checkpoint_gpu_{rank}.pt` (backbone, PartialFC shard, optimizer, LR scheduler, AMP scaler); `config.keep_epoch_checkpoints = True` additionally keeps `checkpoint_epoch{N}_gpu_{rank}.pt`.
+All `train_*.py` scripts share `utils/utils_checkpoint.py`. With `config.save_all_states = True` every epoch writes `{output}/checkpoint_gpu_{rank}.pt` (backbone, PartialFC shard, optimizer, LR scheduler, AMP scaler); `config.keep_epoch_checkpoints = True` additionally keeps `checkpoint_epoch{N}_gpu_{rank}.pt`, and `config.keep_last_epochs = N` prunes those down to the newest N after every epoch. To resume on a different number of GPUs, re-split the PartialFC shards first with `scripts/reshard_checkpoint.py`.
 
 ```python
 config.resume = True                 # latest checkpoint in config.output

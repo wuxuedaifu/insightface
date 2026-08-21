@@ -4,6 +4,7 @@ train_transface.py and train_transface_pp.py.
 Files (per rank, because PartialFC shards the class weights across ranks):
     {output}/checkpoint_gpu_{rank}.pt               latest, overwritten every epoch
     {output}/checkpoint_epoch{E}_gpu_{rank}.pt      kept when cfg.keep_epoch_checkpoints is True
+                                                    (cfg.keep_last_epochs = N keeps only the newest N)
 
 Resume options (all read from the config):
     resume = True                resume from the latest checkpoint in cfg.output
@@ -12,8 +13,10 @@ Resume options (all read from the config):
     resume_from = <pattern>      explicit file; may contain {rank} / {epoch} placeholders
 The number of GPUs must match the run that wrote the checkpoint.
 """
+import glob
 import logging
 import os
+import re
 import shutil
 
 import torch
@@ -24,6 +27,32 @@ CHECKPOINT_EPOCH = "checkpoint_epoch{epoch}_gpu_{rank}.pt"
 
 def _unwrap(module):
     return module.module if hasattr(module, "module") else module
+
+
+def prune_epoch_checkpoints(output, rank, keep_last):
+    """Delete this rank's per-epoch checkpoints beyond the newest `keep_last`.
+
+    Each rank only ever touches its own files, so this is safe to call from every rank.
+    `keep_last` <= 0 (or None) keeps everything."""
+    if not keep_last or keep_last <= 0:
+        return []
+    pattern = re.compile(r"^checkpoint_epoch(\d+)_gpu_%d\.pt$" % rank)
+    found = []
+    for path in glob.glob(os.path.join(output, "checkpoint_epoch*_gpu_%d.pt" % rank)):
+        m = pattern.match(os.path.basename(path))
+        if m:
+            found.append((int(m.group(1)), path))
+    removed = []
+    for _, path in sorted(found, reverse=True)[keep_last:]:
+        try:
+            os.remove(path)
+            removed.append(path)
+        except OSError as e:                                  # a concurrent cleanup is not fatal
+            logging.warning("could not remove old checkpoint %s: %s", path, e)
+    if removed:
+        logging.info("pruned %d old checkpoint(s) for rank %d, kept the newest %d",
+                     len(removed), rank, keep_last)
+    return removed
 
 
 def save_checkpoint(cfg, rank, epoch, global_step, backbone, module_partial_fc, opt, lr_scheduler,
@@ -48,6 +77,7 @@ def save_checkpoint(cfg, rank, epoch, global_step, backbone, module_partial_fc, 
     os.replace(latest + ".tmp", latest)                      # never leave a half-written "latest"
     if cfg.get("keep_epoch_checkpoints", False):
         shutil.copyfile(latest, os.path.join(cfg.output, CHECKPOINT_EPOCH.format(epoch=epoch, rank=rank)))
+        prune_epoch_checkpoints(cfg.output, rank, cfg.get("keep_last_epochs", 0))
     return latest
 
 

@@ -1,11 +1,18 @@
+import inspect
 from torch.optim.lr_scheduler import _LRScheduler
 from torch.optim import SGD
 import torch
 import warnings
 
+# `verbose` was deprecated in torch 2.2 and removed from LRScheduler.__init__ in later
+# releases (2.9+), so only forward it when the installed torch still accepts it.
+_LRS_TAKES_VERBOSE = "verbose" in inspect.signature(_LRScheduler.__init__).parameters
+
+
 class PolynomialLRWarmup(_LRScheduler):
     def __init__(self, optimizer, warmup_iters, total_iters=5, power=1.0, last_epoch=-1, verbose=False):
-        super().__init__(optimizer, last_epoch=last_epoch, verbose=verbose)
+        kwargs = {"verbose": verbose} if _LRS_TAKES_VERBOSE else {}
+        super().__init__(optimizer, last_epoch=last_epoch, **kwargs)
         self.total_iters = total_iters
         self.power = power
         self.warmup_iters = warmup_iters

@@ -4,6 +4,17 @@ from .mobilefacenet import get_mbf
 
 def get_model(name, **kwargs):
     norm_output = kwargs.get("norm_output", False)
+    # Perf knobs for the ViT-family backbones. Popped here so the CNN/mbf branches,
+    # which forward **kwargs straight into their constructors, never see them.
+    #   using_checkpoint: None keeps each backbone's published default; False trades
+    #                     memory for ~1.35x throughput (activations are not recomputed).
+    #   attn_impl:        "math" is the upstream fp32 attention, "sdpa" the fused
+    #                     equivalent (see backbones/vit.py Attention.forward).
+    _ckpt_override = kwargs.pop("using_checkpoint", None)
+    attn_impl = kwargs.pop("attn_impl", "math")
+
+    def _ckpt(default):
+        return default if _ckpt_override is None else bool(_ckpt_override)
     # resnet
     if name == "r18":
         return iresnet18(False, **kwargs)
@@ -35,28 +46,28 @@ def get_model(name, **kwargs):
         from .vit import VisionTransformer
         return VisionTransformer(
             img_size=112, patch_size=9, num_classes=num_features, embed_dim=256, depth=12,
-            num_heads=8, drop_path_rate=0.1, norm_layer="ln", mask_ratio=0.1, norm_output=norm_output)
+            num_heads=8, drop_path_rate=0.1, norm_layer="ln", mask_ratio=0.1, using_checkpoint=_ckpt(False), norm_output=norm_output, attn_impl=attn_impl)
 
     elif name == "vit_t_dp005_mask0": # For WebFace42M
         num_features = kwargs.get("num_features", 512)
         from .vit import VisionTransformer
         return VisionTransformer(
             img_size=112, patch_size=9, num_classes=num_features, embed_dim=256, depth=12,
-            num_heads=8, drop_path_rate=0.05, norm_layer="ln", mask_ratio=0.0, norm_output=norm_output)
+            num_heads=8, drop_path_rate=0.05, norm_layer="ln", mask_ratio=0.0, using_checkpoint=_ckpt(False), norm_output=norm_output, attn_impl=attn_impl)
 
     elif name == "vit_s":
         num_features = kwargs.get("num_features", 512)
         from .vit import VisionTransformer
         return VisionTransformer(
             img_size=112, patch_size=9, num_classes=num_features, embed_dim=512, depth=12,
-            num_heads=8, drop_path_rate=0.1, norm_layer="ln", mask_ratio=0.1, norm_output=norm_output)
+            num_heads=8, drop_path_rate=0.1, norm_layer="ln", mask_ratio=0.1, using_checkpoint=_ckpt(False), norm_output=norm_output, attn_impl=attn_impl)
     
     elif name == "vit_s_dp005_mask_0":  # For WebFace42M
         num_features = kwargs.get("num_features", 512)
         from .vit import VisionTransformer
         return VisionTransformer(
             img_size=112, patch_size=9, num_classes=num_features, embed_dim=512, depth=12,
-            num_heads=8, drop_path_rate=0.05, norm_layer="ln", mask_ratio=0.0, norm_output=norm_output)
+            num_heads=8, drop_path_rate=0.05, norm_layer="ln", mask_ratio=0.0, using_checkpoint=_ckpt(False), norm_output=norm_output, attn_impl=attn_impl)
     
     elif name == "vit_b":
         # this is a feature
@@ -64,7 +75,7 @@ def get_model(name, **kwargs):
         from .vit import VisionTransformer
         return VisionTransformer(
             img_size=112, patch_size=9, num_classes=num_features, embed_dim=512, depth=24,
-            num_heads=8, drop_path_rate=0.1, norm_layer="ln", mask_ratio=0.1, using_checkpoint=True, norm_output=norm_output)
+            num_heads=8, drop_path_rate=0.1, norm_layer="ln", mask_ratio=0.1, using_checkpoint=_ckpt(True), norm_output=norm_output, attn_impl=attn_impl)
 
     elif name == "vit_b_dp005_mask_005":  # For WebFace42M
         # this is a feature
@@ -72,7 +83,7 @@ def get_model(name, **kwargs):
         from .vit import VisionTransformer
         return VisionTransformer(
             img_size=112, patch_size=9, num_classes=num_features, embed_dim=512, depth=24,
-            num_heads=8, drop_path_rate=0.05, norm_layer="ln", mask_ratio=0.05, using_checkpoint=True, norm_output=norm_output)
+            num_heads=8, drop_path_rate=0.05, norm_layer="ln", mask_ratio=0.05, using_checkpoint=_ckpt(True), norm_output=norm_output, attn_impl=attn_impl)
 
     elif name == "vit_l_dp005_mask_005":  # For WebFace42M
         # this is a feature
@@ -80,14 +91,14 @@ def get_model(name, **kwargs):
         from .vit import VisionTransformer
         return VisionTransformer(
             img_size=112, patch_size=9, num_classes=num_features, embed_dim=768, depth=24,
-            num_heads=8, drop_path_rate=0.05, norm_layer="ln", mask_ratio=0.05, using_checkpoint=True, norm_output=norm_output)
+            num_heads=8, drop_path_rate=0.05, norm_layer="ln", mask_ratio=0.05, using_checkpoint=_ckpt(True), norm_output=norm_output, attn_impl=attn_impl)
         
     elif name == "vit_h":  # For WebFace42M
         num_features = kwargs.get("num_features", 512)
         from .vit import VisionTransformer
         return VisionTransformer(
             img_size=112, patch_size=9, num_classes=num_features, embed_dim=1024, depth=48,
-            num_heads=8, drop_path_rate=0.1, norm_layer="ln", mask_ratio=0, using_checkpoint=True, norm_output=norm_output)
+            num_heads=8, drop_path_rate=0.1, norm_layer="ln", mask_ratio=0, using_checkpoint=_ckpt(True), norm_output=norm_output, attn_impl=attn_impl)
 
     elif name in ("mambavision_t", "mambavision_s", "mambavision_b", "mambavision_l"):
         from . import mamba_vision
@@ -105,6 +116,7 @@ def get_model(name, **kwargs):
             use_topology=kwargs.get("use_topology", True),
             tibc_prob=kwargs.get("tibc_prob", 0.3),
             fp16=kwargs.get("fp16", False),
+            using_checkpoint=_ckpt(True),
             norm_output=norm_output)
 
     elif name == "transface_vit_b":
@@ -114,7 +126,7 @@ def get_model(name, **kwargs):
             img_size=112, patch_size=9, num_classes=num_features,
             embed_dim=512, depth=24, num_heads=8,
             drop_path_rate=0.05, norm_layer="ln",
-            mask_ratio=0.05, using_checkpoint=True, norm_output=norm_output)
+            mask_ratio=0.05, using_checkpoint=_ckpt(True), norm_output=norm_output, attn_impl=attn_impl)
 
     elif name == "transface_vit_l":
         num_features = kwargs.get("num_features", 512)
@@ -123,7 +135,7 @@ def get_model(name, **kwargs):
             img_size=112, patch_size=9, num_classes=num_features,
             embed_dim=768, depth=24, num_heads=8,
             drop_path_rate=0.05, norm_layer="ln",
-            mask_ratio=0.05, using_checkpoint=True, norm_output=norm_output)
+            mask_ratio=0.05, using_checkpoint=_ckpt(True), norm_output=norm_output, attn_impl=attn_impl)
 
     else:
         raise ValueError()

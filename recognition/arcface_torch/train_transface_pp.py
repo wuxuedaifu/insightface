@@ -110,6 +110,7 @@ def main(args):
         cfg.network, dropout=0.0, fp16=cfg.fp16,
         num_features=cfg.embedding_size,
         norm_output=use_adaface,
+        using_checkpoint=cfg.get("using_checkpoint", None),
         byte_format=byte_format,
         use_topology=cfg.get("use_topology", True),
         tibc_prob=cfg.get("tibc_prob", 0.3)).cuda()
@@ -120,7 +121,7 @@ def main(args):
 
     backbone = torch.nn.parallel.DistributedDataParallel(
         module=backbone, broadcast_buffers=False, device_ids=[local_rank],
-        bucket_cap_mb=16, find_unused_parameters=True)
+        bucket_cap_mb=16, find_unused_parameters=False)
     backbone.register_comm_hook(None, fp16_compress_hook)
 
     backbone.train()

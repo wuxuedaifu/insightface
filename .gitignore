@@ -101,3 +101,7 @@ ENV/
 .mypy_cache/
 
 .DS_Store
+
+# training outputs / downloaded weights
+train_outputs*/
+weights/
