@@ -191,7 +191,7 @@ torchrun --nproc_per_node=8 train_transface_pp.py configs/ms1mv3_transface_pp_vi
 
 ### Resuming from a checkpoint
 
-All `train_*.py` scripts share `utils/utils_checkpoint.py`. With `config.save_all_states = True` every epoch writes `{output}/checkpoint_gpu_{rank}.pt` (backbone, PartialFC shard, optimizer, LR scheduler, AMP scaler); `config.keep_epoch_checkpoints = True` additionally keeps `checkpoint_epoch{N}_gpu_{rank}.pt`, and `config.keep_last_epochs = N` prunes those down to the newest N after every epoch. To resume on a different number of GPUs, re-split the PartialFC shards first with `scripts/reshard_checkpoint.py`.
+All `train_*.py` scripts share `utils/utils_checkpoint.py`. With `config.save_all_states = True` every epoch writes `{output}/checkpoint_gpu_{rank}.pt` (backbone, PartialFC shard, optimizer, LR scheduler, AMP scaler); `config.keep_epoch_checkpoints = True` additionally keeps `checkpoint_epoch{N}_gpu_{rank}.pt`, and `config.keep_last_epochs = N` prunes those down to the newest N after every epoch. To resume on a different number of GPUs, re-split the PartialFC shards first with `scripts/reshard_checkpoint.py`. See [docs/checkpoints.md](docs/checkpoints.md) for the file layout, the disk-usage maths and worked re-shard examples.
 
 ```python
 config.resume = True                 # latest checkpoint in config.output
@@ -200,6 +200,10 @@ config.resume_from = "work_dirs/x"   # ... or from another run dir / a "{rank}"-
 ```
 
 The number of GPUs must match the run that wrote the checkpoint (PartialFC shards are per rank).
+
+### Recipe pitfalls and production readiness
+
+[docs/production_readiness.md](docs/production_readiness.md) collects the mistakes that are cheap to make and expensive to find late — the learning rate does *not* follow the linear scaling rule for AdamW ViT here, AdaFace is close to pointless without `config.dali_aug`, `config.val_targets = []` silently disables evaluation entirely — plus the reference numbers below and how they relate to NIST FRTE and commercial face recognition results.
 
 ### Data loading
 
