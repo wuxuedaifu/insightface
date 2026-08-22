@@ -4,7 +4,8 @@ Notes collected while bringing up a WebFace42M TransFace-L run on this repo. Par
 recipe mistakes that are easy to make and expensive to discover late. Part 2 is what "good" looks
 like inside this repo. Part 3 is what "good" looks like *outside* it — how the numbers in our README
 relate to what commercial face recognition vendors are measured on, and where the remaining distance
-actually sits.
+actually sits. Parts 4 and 5 cover what the hardware actually has to be, and what stands between a
+trained backbone and something deployable.
 
 ---
 
@@ -202,6 +203,66 @@ that matter, but the detector, quality assessment, PAD, fairness testing and cer
 collectively more work than training the model. For self-hosted, lower-risk use — internal access
 control, photo clustering, non-regulated identity checks — a well-trained WebFace42M model of this
 class is genuinely sufficient.
+
+---
+
+## Part 4 — What the hardware actually has to be
+
+Face recognition training is far cheaper than its reputation suggests, and the compute budget is
+almost never what limits final accuracy.
+
+**Measured throughput.** Six H200 GPUs running TransFace ViT-L (25.3 GFLOPs/image, plus the extra
+forward pass DPAP requires) sustain ~6,780 samples/sec. The README's ViT-L row — the 98.00 IJB-C(1e-4)
+result — was produced on a **64-GPU cluster at ~9,406 samples/sec**. Discounting DPAP's overhead, a
+single 8-GPU node of current-generation hardware matches or exceeds the cluster that produced the
+published state of the art. A full 35–40 epoch WebFace42M ViT-L run finishes in 2–3 days on one node.
+
+**Storage, not FLOPs, is the binding constraint.** The WebFace42M RecordIO alone is ~400 GB. A run
+with `keep_last_epochs = 4` across 6 ranks holds ~160 GB of checkpoints. Add an aligned in-domain
+corpus, a second concurrent experiment's outputs, and extracted embeddings for deduplication, and a
+2 TB volume is exhausted before the GPUs are. Budget an order of magnitude more disk than the raw
+dataset; it is by far the cheapest capacity to add.
+
+**Interconnect rarely limits this workload.** PartialFC shards the classifier and the fp16 gradient
+compression hook keeps all-reduce volume low. Measured: 6 GPUs deliver 1.51x the throughput of 4
+(ideal 1.5x) even when the six span two NVLink islands and communicate across PCIe.
+
+**What one node does not buy is experiment parallelism.** A team running ten configurations
+simultaneously learns ten times faster per week. On a single node the runs are serial, so a
+misconfigured 50-hour run costs a week of iteration rather than one slot. That raises the value of
+the cheap checks — verify the LR against the official configs, confirm `val_targets` is non-empty,
+confirm the pretrained load matched every tensor — *before* launching, not after.
+
+## Part 5 — From a model to a product
+
+Training a competitive model is a minority of the work. What sits between a trained backbone and
+something deployable, roughly in order of how much it blocks:
+
+1. **Measurement.** Without an operating-point-correct test set there is no threshold to ship, no
+   number to commit to a customer, and no way to tell whether any change helped. Cheapest item on
+   this list and the one that gates everything else. See [eval.md](eval.md).
+2. **The surrounding pipeline.** Face detection, quality assessment (FIQA), alignment, template
+   extraction and compression, 1:N indexing and score normalisation, an SDK boundary, and version
+   governance that pins preprocessing + model hash + threshold as a single release unit. This is
+   several times the engineering of the model itself and none of it is GPU work.
+3. **Presentation-attack detection.** PAD (ISO 30107 / iBeta levels), morph detection, injection
+   attack detection. Absent from this repo entirely. In deployment the attack surface usually costs
+   more than the miss rate does. Licensing this is almost always better economics than building it.
+4. **Certification and compliance.** NIST FRTE submission is free and is the cheapest credible
+   third-party number available. PAD certification is not free. Biometric data protection law governs
+   what the training corpus — and often the derived weights — may be used for and where they may
+   live; model inversion means weights trained on an identity corpus can themselves be treated as
+   derived personal data.
+5. **Operational data with multiple captures per identity.** The structural advantage large vendors
+   hold is not identity count but repeat captures of the same person across years and devices, which
+   accrue as a by-product of running identity systems. This is an access problem, not a technical
+   one, and no architecture change substitutes for it.
+
+The practical consequence: the model layer can be brought close to the open-source ceiling by one
+engineer with one node in a few weeks. Everything above is where the remaining years are. A team in
+that position is usually better served specialising the model on a domain it has unique data for,
+licensing the components with poor build economics (PAD especially), and spending its own effort on
+the one axis where its data is a genuine advantage.
 
 ## Sources
 

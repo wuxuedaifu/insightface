@@ -203,7 +203,7 @@ The number of GPUs must match the run that wrote the checkpoint (PartialFC shard
 
 ### Recipe pitfalls and production readiness
 
-[docs/production_readiness.md](docs/production_readiness.md) collects the mistakes that are cheap to make and expensive to find late — the learning rate does *not* follow the linear scaling rule for AdamW ViT here, AdaFace is close to pointless without `config.dali_aug`, `config.val_targets = []` silently disables evaluation entirely — plus the reference numbers below and how they relate to NIST FRTE and commercial face recognition results.
+[docs/production_readiness.md](docs/production_readiness.md) collects the mistakes that are cheap to make and expensive to find late — the learning rate does *not* follow the linear scaling rule for AdamW ViT here, AdaFace is close to pointless without `config.dali_aug`, `config.val_targets = []` silently disables evaluation entirely — plus the reference numbers below, what the hardware actually has to be, and how all of it relates to NIST FRTE and commercial face recognition results. [docs/eval.md](docs/eval.md) covers genuine/impostor pairs, operating points and building a test set that can measure FMR = 1e-6; [docs/single_image_datasets.md](docs/single_image_datasets.md) covers folding a one-image-per-identity corpus into training without damaging the model.
 
 ### Data loading
 
